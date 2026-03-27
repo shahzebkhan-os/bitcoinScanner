@@ -1,0 +1,66 @@
+/*
+Bitcoin Scanner - Dark Trading Terminal Theme
+*/
+
+:root {
+  --bg-primary: #0d0e12;
+  --bg-surface: #13151c;
+  --bg-elevated: #1a1d27;
+  --border: #2a2d3a;
+  --text-primary: #e8eaf0;
+  --text-secondary: #7b7f96;
+  --long-color: #00d4a3;
+  --short-color: #f04b5c;
+  --neutral-color: #7b7f96;
+  --accent: #f7931a;
+  --chart-grid: #1e2130;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  overflow-x: hidden;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+/* Utility classes */
+.long-text {
+  color: var(--long-color);
+}
+
+.short-text {
+  color: var(--short-color);
+}
+
+.neutral-text {
+  color: var(--neutral-color);
+}
+
+.accent-text {
+  color: var(--accent);
+}
