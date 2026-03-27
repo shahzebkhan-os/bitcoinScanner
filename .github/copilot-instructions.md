@@ -1,4 +1,37 @@
-## Project overview
+# Bitcoin Scanner - GitHub Copilot Instructions
+
+> **Purpose**: This document provides comprehensive guidance for GitHub Copilot when working on the Bitcoin Scanner project. It contains architectural decisions, coding standards, and implementation specifications.
+
+## General Guidelines for Copilot
+
+When working on this project, GitHub Copilot should:
+- **Follow the specifications exactly** - This is a production-grade trading signal scanner
+- **Prioritize reliability** over features - No crashes, no data loss, robust error handling
+- **Write testable code** - All modules should be unit-testable
+- **Use type hints** in Python and strong typing in TypeScript
+- **Document complex logic** - Especially indicator calculations and strategy conditions
+- **Never hardcode values** - All configuration should come from `config.yaml` or environment variables
+- **Handle async operations correctly** - Use `asyncio` properly in Python, RxJS in Angular
+- **Optimize for real-time performance** - Code executes every second, minimize overhead
+
+## Table of Contents
+
+1. [Project Overview](#project-overview)
+2. [Tech Stack](#tech-stack)
+3. [Project File Structure](#project-file-structure)
+4. [Configuration](#configuration)
+5. [Backend Specifications](#backend-specifications)
+6. [Frontend Specifications](#frontend-specifications)
+7. [WebSocket Protocol](#websocket-protocol)
+8. [Error Handling](#error-handling)
+9. [Testing Requirements](#testing-requirements)
+10. [Development Workflow](#development-workflow)
+11. [Coding Standards](#coding-standards)
+12. [Future Improvements](#future-improvements)
+
+---
+
+## Project Overview
 
 Build a **real-time BTC futures scalping signal scanner** with a live Angular dashboard. The system has two parts:
 
@@ -120,7 +153,9 @@ btc-scanner/
 
 ---
 
-## `config.yaml` — full schema
+## Configuration
+
+### `config.yaml` — Full Schema
 
 ```yaml
 pair: "B-BTC_USDT"
@@ -164,9 +199,13 @@ risk:
 
 ---
 
-## Backend module specifications
+## Backend Specifications
 
-### `scanner/fetcher.py`
+This section defines the architecture and implementation details for the Python backend.
+
+### Module Specifications
+
+#### 1. Data Fetching Module (`scanner/fetcher.py`)
 
 ```python
 """
@@ -190,7 +229,7 @@ Key function signatures:
 """
 ```
 
-### `scanner/indicators.py`
+#### 2. Indicator Calculations Module (`scanner/indicators.py`)
 
 ```python
 """
@@ -237,7 +276,7 @@ class IndicatorSnapshot:
 """
 ```
 
-### `scanner/strategies.py`
+#### 3. Trading Strategies Module (`scanner/strategies.py`)
 
 ```python
 """
@@ -288,7 +327,7 @@ def run_all_strategies(snapshot: IndicatorSnapshot, config: dict) -> list[Signal
 """
 ```
 
-### `scanner/consensus.py`
+#### 4. Consensus Module (`scanner/consensus.py`)
 
 ```python
 """
@@ -307,7 +346,7 @@ class ConsensusResult:
 """
 ```
 
-### `api/websocket_server.py`
+#### 5. WebSocket Server Module (`api/websocket_server.py`)
 
 ```python
 """
@@ -373,7 +412,7 @@ Angular dashboard subscribes to both message types and routes them separately.
 """
 ```
 
-### `api/rest_routes.py`
+#### 6. REST API Module (`api/rest_routes.py`)
 
 ```python
 """
@@ -393,7 +432,7 @@ CORS: Allow http://localhost:4200 (Angular dev server) and http://localhost in p
 """
 ```
 
-### `main.py`
+#### 7. Main Application Module (`main.py`)
 
 ```python
 """
@@ -437,9 +476,7 @@ if __name__ == "__main__":
 """
 ```
 
----
-
-## Backend `requirements.txt`
+### Backend Dependencies (`requirements.txt`)
 
 ```
 fastapi>=0.109.0
@@ -458,9 +495,13 @@ python-telegram-bot>=20.0
 
 ---
 
-## Angular frontend specifications
+## Frontend Specifications
 
-### Global dark theme — `styles.scss`
+This section defines the Angular 17+ frontend architecture and component specifications.
+
+### Angular Component Specifications
+
+#### 1. Global Styling (`styles.scss`)
 
 ```scss
 /*
@@ -486,7 +527,7 @@ Remove default margins and paddings globally.
 */
 ```
 
-### Dashboard layout — `app.component.html`
+#### 2. Main Application Layout (`app.component.html`)
 
 ```html
 <!--
@@ -514,7 +555,9 @@ Each panel is a mat-card with --bg-surface background and --border border.
 -->
 ```
 
-### `core/services/websocket.service.ts`
+### Core Services
+
+#### 3. WebSocket Service (`core/services/websocket.service.ts`)
 
 ```typescript
 /*
@@ -551,7 +594,7 @@ Usage: inject this service, subscribe to messages$ and filter by message.type
 */
 ```
 
-### `core/services/scanner-data.service.ts`
+#### 4. Scanner Data Service (`core/services/scanner-data.service.ts`)
 
 ```typescript
 /*
@@ -599,7 +642,9 @@ Interface definitions to create in models/:
 */
 ```
 
-### `components/price-chart/price-chart.component.ts`
+### Dashboard Components
+
+#### 5. Price Chart Component (`components/price-chart/price-chart.component.ts`)
 
 ```typescript
 /*
@@ -652,7 +697,7 @@ On ngAfterViewInit:
 */
 ```
 
-### `components/indicator-panel/indicator-panel.component.ts`
+#### 6. Indicator Panel Component (`components/indicator-panel/indicator-panel.component.ts`)
 
 ```typescript
 /*
@@ -685,7 +730,7 @@ All Chart.js canvases: transparent background, no legends, minimal labels.
 */
 ```
 
-### `components/strategy-votes/strategy-votes.component.ts`
+#### 7. Strategy Votes Component (`components/strategy-votes/strategy-votes.component.ts`)
 
 ```typescript
 /*
@@ -715,7 +760,7 @@ Use trackBy: trackByStrategy (by strategyName) to avoid unnecessary DOM re-rende
 */
 ```
 
-### `components/signal-feed/signal-feed.component.ts`
+#### 8. Signal Feed Component (`components/signal-feed/signal-feed.component.ts`)
 
 ```typescript
 /*
@@ -748,7 +793,7 @@ if list grows — import ScrollingModule from @angular/cdk/scrolling)
 */
 ```
 
-### `components/status-bar/status-bar.component.ts`
+#### 9. Status Bar Component (`components/status-bar/status-bar.component.ts`)
 
 ```typescript
 /*
@@ -776,7 +821,7 @@ since last tick timestamp. Resets to 0 on each new tick.
 */
 ```
 
-### `components/stats-summary/stats-summary.component.ts`
+#### 10. Stats Summary Component (`components/stats-summary/stats-summary.component.ts`)
 
 ```typescript
 /*
@@ -799,7 +844,9 @@ Subscribe to sessionStats$.
 */
 ```
 
-### Angular `package.json` — key dependencies
+### Frontend Dependencies and Configuration
+
+#### Angular Package Dependencies (`package.json`)
 
 ```json
 {
@@ -829,7 +876,7 @@ Subscribe to sessionStats$.
 }
 ```
 
-### `environments/environment.ts`
+#### Environment Configuration (`environments/environment.ts`)
 
 ```typescript
 export const environment = {
@@ -841,7 +888,9 @@ export const environment = {
 
 ---
 
-## WebSocket message protocol
+## WebSocket Protocol
+
+### Message Types
 
 Python backend sends two message types. Angular must handle both:
 
@@ -912,9 +961,10 @@ Python backend sends two message types. Angular must handle both:
 
 ---
 
-## Error handling requirements
+## Error Handling
 
-**Backend:**
+### Backend Error Handling Requirements
+
 - API rate limiting (429): back off 5 seconds, log event
 - Network drops: exponential backoff retry, never crash
 - Bad candle data: validate non-null OHLCV before adding to buffer
@@ -922,7 +972,8 @@ Python backend sends two message types. Angular must handle both:
 - Alert failures: try/except around every alert — Telegram timeout must not kill loop
 - WebSocket client disconnect: remove from ConnectionManager silently, never throw
 
-**Frontend:**
+### Frontend Error Handling Requirements
+
 - WebSocket disconnect: show red status dot, auto-reconnect with exponential backoff (max 10 attempts)
 - Malformed JSON from server: catch JSON.parse errors, skip message, log to console
 - Chart initialization failure: show error placeholder in chart container, retry on next tick
@@ -931,26 +982,74 @@ Python backend sends two message types. Angular must handle both:
 
 ---
 
-## Testing requirements
+## Testing Requirements
 
-**Backend tests (`tests/`):**
-- `test_indicators.py`: unit test each indicator against fixed synthetic DataFrame
-- `test_strategies.py`: synthetic IndicatorSnapshots triggering LONG, SHORT, NEUTRAL per strategy
-- `test_consensus.py`: vote counting edge cases (0–6 votes, ties)
-- `test_fetcher.py`: mock HTTP with `unittest.mock`
-- `test_websocket.py`: mock WebSocket connections, assert broadcast_tick sends correct JSON shape
+### Backend Tests (`tests/`)
 
-**Frontend tests (`src/app/`):**
-- `websocket.service.spec.ts`: mock WebSocket, test connect/disconnect/reconnect/message routing
-- `scanner-data.service.spec.ts`: feed mock messages, assert BehaviorSubjects update correctly
-- `strategy-votes.component.spec.ts`: render with mock data, assert correct badge colors
-- `signal-feed.component.spec.ts`: assert new signal prepends correctly, empty state renders
+The backend should have comprehensive unit tests:
+
+- **`test_indicators.py`**: Unit test each indicator against fixed synthetic DataFrame
+  - Test EMA calculations with known values
+  - Verify RSI computation matches TradingView
+  - Validate MACD line, signal, and histogram
+  - Test Bollinger Bands width and position calculations
+  - Verify VWAP resets at UTC midnight
+  - Test volume ratio calculations
+
+- **`test_strategies.py`**: Synthetic IndicatorSnapshots triggering LONG, SHORT, NEUTRAL per strategy
+  - Each of the 6 strategies should have tests for all three outcomes
+  - Test edge cases (RSI exactly 30, price exactly at BB band, etc.)
+  - Verify strategy reason strings are descriptive
+
+- **`test_consensus.py`**: Vote counting edge cases
+  - Test 0-6 vote scenarios
+  - Test ties (3 LONG, 3 SHORT)
+  - Verify min_votes threshold enforcement
+  - Test avg_strength calculation
+
+- **`test_fetcher.py`**: Mock HTTP with `unittest.mock`
+  - Test successful candle fetch
+  - Test retry logic on timeout
+  - Test exponential backoff
+  - Test candle deduplication
+
+- **`test_websocket.py`**: Mock WebSocket connections
+  - Assert broadcast_tick sends correct JSON shape
+  - Test multiple client connections
+  - Test client disconnect handling
+
+### Frontend Tests (`src/app/`)
+
+The frontend should have component and service tests:
+
+- **`websocket.service.spec.ts`**: Mock WebSocket
+  - Test connect/disconnect/reconnect
+  - Test message routing to subjects
+  - Test exponential backoff on reconnect
+
+- **`scanner-data.service.spec.ts`**: Feed mock messages
+  - Assert BehaviorSubjects update correctly
+  - Test tick message processing
+  - Test signal message processing
+  - Verify sessionStats$ computation
+
+- **`strategy-votes.component.spec.ts`**: Render with mock data
+  - Assert correct badge colors for LONG/SHORT/NEUTRAL
+  - Test pulsing animation triggers
+  - Verify consensus display
+
+- **`signal-feed.component.spec.ts`**: Signal list rendering
+  - Assert new signal prepends correctly
+  - Test empty state renders
+  - Verify 100-entry cap
 
 ---
 
-## Running the full stack
+## Development Workflow
 
-Add these scripts to the README:
+### Running the Full Stack
+
+The following commands should be added to the project README:
 
 ```bash
 # Backend
@@ -966,11 +1065,9 @@ ng serve
 # Dashboard opens at http://localhost:4200
 ```
 
----
+### README.md Requirements
 
-## README.md requirements
-
-The README must include:
+The project README must include:
 1. System overview with architecture diagram description (backend + WebSocket + Angular)
 2. Prerequisites: Python 3.10+, Node 18+, Angular CLI 17+
 3. Setup: clone → install backend → install frontend → run both → open browser
@@ -986,30 +1083,63 @@ The README must include:
 
 ---
 
-## Important implementation notes for Copilot
+## Coding Standards
 
-**Backend:**
-- Use `asyncio.sleep()` never `time.sleep()` in main loop
-- Candle deduplication: only append if timestamp is genuinely newer than last stored candle
-- VWAP resets at UTC midnight — track current UTC date, reset cumulative sums on date change
-- EMA crossover: detect the flip moment only (store previous ema_fast > ema_slow bool)
-- MACD crossover: detect histogram sign flip only — do not signal on every negative histogram
-- Signal cooldown: suppress same-direction signals for 60 seconds after firing
-- broadcast_tick runs every second even when no new candle — Angular needs consistent ticks
-- Run uvicorn with `loop="asyncio"` to share the event loop with the scanner
+### Important Implementation Notes
 
-**Frontend:**
-- Use `takeUntilDestroyed()` (Angular 16+) or `ngOnDestroy` + `Subject.complete()` to unsubscribe all observables — memory leaks from hot BehaviorSubject subscriptions will corrupt the chart over time
-- lightweight-charts requires `time` in UNIX seconds (not milliseconds) — divide CoinDCX timestamps by 1000
-- Chart.js canvases must be destroyed and recreated if the component is destroyed — call `chart.destroy()` in ngOnDestroy
-- Use Angular's `OnPush` change detection strategy on all components — data arrives every second and default detection will hammer the DOM
-- The price display should use `Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })` — never manually format currency strings
-- Do not store candle history in the component — store it only in ScannerDataService and pass it down via the BehaviorSubject
-- Use `@defer` blocks (Angular 17) for the chart components to lazy-load lightweight-charts only when the chart panel is in view
+#### Backend Python Standards
+
+- **Async operations**: Use `asyncio.sleep()` never `time.sleep()` in main loop
+- **Candle deduplication**: Only append if timestamp is genuinely newer than last stored candle
+- **VWAP calculations**: Reset at UTC midnight — track current UTC date, reset cumulative sums on date change
+- **EMA crossover detection**: Detect the flip moment only (store previous ema_fast > ema_slow bool)
+- **MACD crossover detection**: Detect histogram sign flip only — do not signal on every negative histogram
+- **Signal cooldown**: Suppress same-direction signals for 60 seconds after firing to avoid spam
+- **Broadcasting**: `broadcast_tick` runs every second even when no new candle — Angular needs consistent ticks
+- **Uvicorn configuration**: Run uvicorn with `loop="asyncio"` to share the event loop with the scanner
+- **Type hints**: Use Python 3.10+ type hints for all function signatures
+- **Error handling**: All external API calls should have try/except with logging
+- **Logging**: Use Python's `logging` module with appropriate levels (DEBUG, INFO, WARNING, ERROR)
+
+#### Frontend TypeScript/Angular Standards
+
+- **Memory management**: Use `takeUntilDestroyed()` (Angular 16+) or `ngOnDestroy` + `Subject.complete()` to unsubscribe all observables
+  - Memory leaks from hot BehaviorSubject subscriptions will corrupt the chart over time
+- **Chart timestamps**: lightweight-charts requires `time` in UNIX seconds (not milliseconds) — divide CoinDCX timestamps by 1000
+- **Chart cleanup**: Chart.js canvases must be destroyed and recreated if the component is destroyed — call `chart.destroy()` in ngOnDestroy
+- **Change detection**: Use Angular's `OnPush` change detection strategy on all components — data arrives every second and default detection will hammer the DOM
+- **Number formatting**: The price display should use `Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })` — never manually format currency strings
+- **State management**: Do not store candle history in the component — store it only in ScannerDataService and pass it down via the BehaviorSubject
+- **Lazy loading**: Use `@defer` blocks (Angular 17) for the chart components to lazy-load lightweight-charts only when the chart panel is in view
+- **Strong typing**: All interfaces should be defined in `models/` directory
+- **RxJS best practices**: Always unsubscribe, use pipeable operators, avoid nested subscriptions
+
+### Code Quality Guidelines
+
+- **DRY principle**: Don't repeat yourself - extract common logic into utility functions
+- **Single Responsibility**: Each module/component should have one clear purpose
+- **Naming conventions**:
+  - Python: snake_case for functions/variables, PascalCase for classes
+  - TypeScript: camelCase for variables/functions, PascalCase for classes/interfaces
+- **Comments**: Add comments for complex business logic, especially strategy conditions
+- **Constants**: Define magic numbers as named constants
+- **Configuration**: Never hardcode URLs, ports, or thresholds
+
+### Security Considerations
+
+- **API Keys**: Never commit Telegram bot tokens or API keys to version control
+- **CORS**: Backend should restrict CORS to known frontend origins (localhost:4200 in dev)
+- **Input validation**: Validate all config.yaml values on startup
+- **WebSocket authentication**: Consider adding authentication for production deployments
+- **Rate limiting**: Respect CoinDCX API rate limits to avoid IP bans
+- **Sanitization**: Sanitize config output in REST API responses (remove sensitive tokens)
+- **Environment variables**: Use environment variables for production secrets, not config.yaml
 
 ---
 
-## Suggested future improvements (mention in README)
+## Future Improvements
+
+### Suggested Enhancements (to mention in README)
 
 - Multi-pair scanning tab: add BTC, ETH, BNB tabs in Angular with separate WebSocket streams per pair
 - Backtesting page: Angular form to select date range, calls a Python `/backtest` endpoint, renders historical signal overlay on chart

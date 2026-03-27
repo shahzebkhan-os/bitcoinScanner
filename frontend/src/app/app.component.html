@@ -1,0 +1,113 @@
+<div class="dashboard">
+  <div class="status-bar">
+    <h1>🪙 Bitcoin Scanner Dashboard</h1>
+    <div class="connection-status">
+      <span [class]="'status-dot ' + (wsService.connectionStatus$ | async)"></span>
+      <span>{{ (wsService.connectionStatus$ | async) | uppercase }}</span>
+    </div>
+  </div>
+
+  <div class="main-content">
+    <div class="left-panel">
+      <div class="panel price-panel">
+        <h2>Price Data</h2>
+        <div class="price-display">
+          <div class="current-price">
+            ${{ (scannerData.latestIndicators$ | async)?.currentPrice | number:'1.2-2' || '---' }}
+          </div>
+          <div class="indicator-row">
+            <span>RSI: {{ (scannerData.latestIndicators$ | async)?.rsi | number:'1.1-1' || '---' }}</span>
+            <span>Volume Ratio: {{ (scannerData.latestIndicators$ | async)?.volumeRatio | number:'1.2-2' || '---' }}x</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel indicators-panel">
+        <h2>Indicators</h2>
+        <div class="indicator-grid">
+          <div class="indicator-item">
+            <label>EMA Fast (9):</label>
+            <span>{{ (scannerData.latestIndicators$ | async)?.emaFast | number:'1.2-2' || '---' }}</span>
+          </div>
+          <div class="indicator-item">
+            <label>EMA Slow (21):</label>
+            <span>{{ (scannerData.latestIndicators$ | async)?.emaSlow | number:'1.2-2' || '---' }}</span>
+          </div>
+          <div class="indicator-item">
+            <label>MACD:</label>
+            <span>{{ (scannerData.latestIndicators$ | async)?.macdHistogram | number:'1.2-2' || '---' }}</span>
+          </div>
+          <div class="indicator-item">
+            <label>VWAP:</label>
+            <span>{{ (scannerData.latestIndicators$ | async)?.vwap | number:'1.2-2' || '---' }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel stats-panel">
+        <h2>Session Stats</h2>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <label>Total Signals:</label>
+            <span>{{ (scannerData.sessionStats$ | async)?.total || 0 }}</span>
+          </div>
+          <div class="stat-item long-text">
+            <label>Long Signals:</label>
+            <span>{{ (scannerData.sessionStats$ | async)?.longs || 0 }}</span>
+          </div>
+          <div class="stat-item short-text">
+            <label>Short Signals:</label>
+            <span>{{ (scannerData.sessionStats$ | async)?.shorts || 0 }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="right-panel">
+      <div class="panel strategies-panel">
+        <h2>Strategy Votes</h2>
+        <div class="consensus-display">
+          <div *ngIf="scannerData.consensus$ | async as consensus"
+               [class]="'consensus-badge ' + consensus.direction.toLowerCase()">
+            {{ consensus.direction }} {{ consensus.longVotes + consensus.shortVotes }}/6
+          </div>
+        </div>
+        <div class="strategies-list">
+          <div *ngFor="let strategy of (scannerData.strategyVotes$ | async)"
+               class="strategy-card">
+            <div class="strategy-header">
+              <span class="strategy-name">{{ strategy.strategyName }}</span>
+              <span [class]="'direction-badge ' + strategy.direction.toLowerCase()">
+                {{ strategy.direction }}
+              </span>
+            </div>
+            <div class="strategy-reason">{{ strategy.reason }}</div>
+            <div class="strength-bar">
+              <div class="strength-fill" [style.width.%]="strategy.strength * 100"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel signals-panel">
+    <h2>Signal Feed</h2>
+    <div class="signals-feed">
+      <div *ngFor="let signal of (scannerData.signalFeed$ | async)"
+           [class]="'signal-row ' + signal.direction.toLowerCase()">
+        <span class="signal-time">{{ signal.timestamp | date:'HH:mm:ss' }}</span>
+        <span [class]="'signal-direction ' + signal.direction.toLowerCase()">
+          {{ signal.direction === 'LONG' ? '▲' : '▼' }} {{ signal.direction }}
+        </span>
+        <span class="signal-price">${{ signal.price | number:'1.2-2' }}</span>
+        <span class="signal-votes">{{ signal.votes }}</span>
+        <span class="signal-strength">{{ signal.strength | number:'1.2-2' }}</span>
+      </div>
+      <div *ngIf="(scannerData.signalFeed$ | async)?.length === 0" class="empty-state">
+        Waiting for consensus signals...
+      </div>
+    </div>
+  </div>
+</div>
+
