@@ -121,6 +121,14 @@ class CandleBuffer:
         if new_candles is None or new_candles.empty:
             return False
 
+        if not self.candles:
+            # Initial load - ingest all candles from the dataframe
+            for _, row in new_candles.iterrows():
+                self.candles.append(row.to_dict())
+            self.last_timestamp = new_candles.iloc[-1]['time']
+            logger.info(f"Initial buffer load: {len(self.candles)} candles, latest: {self.last_timestamp}")
+            return True
+
         # Get the latest candle from new data
         latest_candle = new_candles.iloc[-1]
         latest_timestamp = latest_candle['time']

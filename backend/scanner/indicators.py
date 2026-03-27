@@ -42,15 +42,29 @@ class IndicatorSnapshot:
     timestamp: datetime
 
     def to_dict(self) -> dict:
-        """Serialize to JSON-safe dict for WebSocket broadcast."""
-        result = asdict(self)
-        # Convert datetime to ISO string
-        result['timestamp'] = self.timestamp.isoformat()
-        # Round all floats to 4 decimal places
-        for key, value in result.items():
-            if isinstance(value, float):
-                result[key] = round(value, 4)
-        return result
+        """Serialize to JSON-safe camelCase dict for WebSocket broadcast."""
+        return {
+            "emaFast": round(self.ema_fast, 4),
+            "emaSlow": round(self.ema_slow, 4),
+            "emaCrossover": self.ema_crossover,
+            "rsi": round(self.rsi, 4),
+            "macdLine": round(self.macd_line, 4),
+            "macdSignal": round(self.macd_signal, 4),
+            "macdHistogram": round(self.macd_histogram, 4),
+            "macdCross": self.macd_cross,
+            "bbUpper": round(self.bb_upper, 4),
+            "bbMiddle": round(self.bb_middle, 4),
+            "bbLower": round(self.bb_lower, 4),
+            "bbBandwidth": round(self.bb_bandwidth, 4),
+            "closeVsBb": self.close_vs_bb,
+            "vwap": round(self.vwap, 4),
+            "closeVsVwap": self.close_vs_vwap,
+            "currentVolume": round(self.current_volume, 4),
+            "avgVolume": round(self.avg_volume, 4),
+            "volumeRatio": round(self.volume_ratio, 4),
+            "currentPrice": round(self.current_price, 4),
+            "timestamp": self.timestamp.isoformat()
+        }
 
 
 def calculate_indicators(df: pd.DataFrame, config: dict) -> Optional[IndicatorSnapshot]:

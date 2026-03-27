@@ -28,8 +28,16 @@ class ConsensusResult:
     fired: bool
 
     def to_dict(self) -> dict:
-        """Serialize to JSON-safe dict for WebSocket broadcast."""
-        return asdict(self)
+        """Serialize to JSON-safe camelCase dict for WebSocket broadcast."""
+        return {
+            "direction": self.direction,
+            "longVotes": self.long_votes,
+            "shortVotes": self.short_votes,
+            "neutralVotes": self.neutral_votes,
+            "avgStrength": round(self.avg_strength, 4),
+            "agreeingStrategies": self.agreeing_strategies,
+            "fired": self.fired
+        }
 
 
 def evaluate_consensus(results: List[SignalResult], config: dict) -> ConsensusResult:

@@ -94,7 +94,7 @@ async def broadcast_tick(
             "indicators": snapshot.to_dict(),
             "strategies": [
                 {
-                    "strategy_name": r.strategy_name,
+                    "strategyName": r.strategy_name,
                     "direction": r.direction,
                     "strength": r.strength,
                     "reason": r.reason
@@ -102,7 +102,7 @@ async def broadcast_tick(
                 for r in results
             ],
             "consensus": consensus.to_dict(),
-            "signal_fired": consensus.fired
+            "signalFired": consensus.fired
         }
 
         await manager.broadcast(payload)
@@ -129,7 +129,7 @@ async def broadcast_signal(consensus: ConsensusResult, snapshot: IndicatorSnapsh
             "strategies": consensus.agreeing_strategies,
             "strength": consensus.avg_strength,
             "rsi": snapshot.rsi,
-            "volume_ratio": snapshot.volume_ratio
+            "volumeRatio": snapshot.volume_ratio
         }
 
         await manager.broadcast(payload)
