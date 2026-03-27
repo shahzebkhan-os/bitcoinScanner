@@ -16,8 +16,17 @@
             ${{ (scannerData.latestIndicators$ | async)?.currentPrice | number:'1.2-2' || '---' }}
           </div>
           <div class="indicator-row">
-            <span>RSI: {{ (scannerData.latestIndicators$ | async)?.rsi | number:'1.1-1' || '---' }}</span>
-            <span>Volume Ratio: {{ (scannerData.latestIndicators$ | async)?.volumeRatio | number:'1.2-2' || '---' }}x</span>
+            <span [class.bullish]="getRsiZoneClass(scannerData.latestIndicators$ | async) === 'bullish'"
+                  [class.bearish]="getRsiZoneClass(scannerData.latestIndicators$ | async) === 'bearish'">
+              RSI: {{ (scannerData.latestIndicators$ | async)?.rsi | number:'1.1-1' || '---' }}
+              <span class="zone-indicator" [class]="getRsiZoneClass(scannerData.latestIndicators$ | async)">
+                [{{ getRsiZone(scannerData.latestIndicators$ | async) }}]
+              </span>
+            </span>
+            <span [class]="getVolumeTrendClass(scannerData.latestIndicators$ | async)">
+              Volume Ratio: {{ (scannerData.latestIndicators$ | async)?.volumeRatio | number:'1.2-2' || '---' }}x
+              <span class="trend-arrow">{{ getVolumeTrend(scannerData.latestIndicators$ | async) }}</span>
+            </span>
           </div>
         </div>
       </div>
@@ -25,21 +34,54 @@
       <div class="panel indicators-panel">
         <h2>Indicators</h2>
         <div class="indicator-grid">
-          <div class="indicator-item">
+          <div class="indicator-item" [class]="getEmaTrendClass(scannerData.latestIndicators$ | async)">
             <label>EMA Fast (9):</label>
-            <span>{{ (scannerData.latestIndicators$ | async)?.emaFast | number:'1.2-2' || '---' }}</span>
+            <span>
+              {{ (scannerData.latestIndicators$ | async)?.emaFast | number:'1.2-2' || '---' }}
+              <span class="trend-arrow">{{ getEmaTrend(scannerData.latestIndicators$ | async) }}</span>
+            </span>
           </div>
-          <div class="indicator-item">
+          <div class="indicator-item" [class]="getEmaTrendClass(scannerData.latestIndicators$ | async)">
             <label>EMA Slow (21):</label>
-            <span>{{ (scannerData.latestIndicators$ | async)?.emaSlow | number:'1.2-2' || '---' }}</span>
+            <span>
+              {{ (scannerData.latestIndicators$ | async)?.emaSlow | number:'1.2-2' || '---' }}
+              <span class="trend-arrow">{{ getEmaTrend(scannerData.latestIndicators$ | async) }}</span>
+            </span>
           </div>
-          <div class="indicator-item">
+          <div class="indicator-item" [class]="getMacdTrendClass(scannerData.latestIndicators$ | async)">
             <label>MACD:</label>
-            <span>{{ (scannerData.latestIndicators$ | async)?.macdHistogram | number:'1.2-2' || '---' }}</span>
+            <span>
+              {{ (scannerData.latestIndicators$ | async)?.macdHistogram | number:'1.2-2' || '---' }}
+              <span class="trend-arrow">{{ getMacdTrend(scannerData.latestIndicators$ | async) }}</span>
+            </span>
           </div>
-          <div class="indicator-item">
+          <div class="indicator-item" [class]="getVwapTrendClass(scannerData.latestIndicators$ | async)">
             <label>VWAP:</label>
-            <span>{{ (scannerData.latestIndicators$ | async)?.vwap | number:'1.2-2' || '---' }}</span>
+            <span>
+              {{ (scannerData.latestIndicators$ | async)?.vwap | number:'1.2-2' || '---' }}
+              <span class="trend-arrow">{{ getVwapTrend(scannerData.latestIndicators$ | async) }}</span>
+              <span class="vwap-status" [class]="getVwapTrendClass(scannerData.latestIndicators$ | async)">
+                [{{ (scannerData.latestIndicators$ | async)?.closeVsVwap?.toUpperCase() || '---' }}]
+              </span>
+            </span>
+          </div>
+          <div class="indicator-item" [class]="getBollingerBandsClass(scannerData.latestIndicators$ | async)">
+            <label>BB Upper:</label>
+            <span>{{ (scannerData.latestIndicators$ | async)?.bbUpper | number:'1.2-2' || '---' }}</span>
+          </div>
+          <div class="indicator-item" [class]="getBollingerBandsClass(scannerData.latestIndicators$ | async)">
+            <label>BB Middle:</label>
+            <span>{{ (scannerData.latestIndicators$ | async)?.bbMiddle | number:'1.2-2' || '---' }}</span>
+          </div>
+          <div class="indicator-item" [class]="getBollingerBandsClass(scannerData.latestIndicators$ | async)">
+            <label>BB Lower:</label>
+            <span>{{ (scannerData.latestIndicators$ | async)?.bbLower | number:'1.2-2' || '---' }}</span>
+          </div>
+          <div class="indicator-item bb-status" [class]="getBollingerBandsClass(scannerData.latestIndicators$ | async)">
+            <label>BB Position:</label>
+            <span class="bb-position-indicator">
+              {{ getBollingerBandsStatus(scannerData.latestIndicators$ | async) }}
+            </span>
           </div>
         </div>
       </div>

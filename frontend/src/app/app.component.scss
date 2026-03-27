@@ -94,7 +94,87 @@
   padding: 0.5rem;
   background: var(--bg-elevated);
   border-radius: 4px;
+  transition: background-color 0.3s ease;
 }
+
+// Trend-based color coding for indicators
+.indicator-item.bullish {
+  border-left: 3px solid var(--long-color);
+  background: rgba(0, 212, 163, 0.05);
+
+  .trend-arrow, .bb-position-indicator { color: var(--long-color); }
+}
+
+.indicator-item.bearish {
+  border-left: 3px solid var(--short-color);
+  background: rgba(240, 75, 92, 0.05);
+
+  .trend-arrow, .bb-position-indicator { color: var(--short-color); }
+}
+
+.indicator-item.neutral {
+  border-left: 3px solid var(--neutral-color);
+
+  .trend-arrow { color: var(--neutral-color); }
+}
+
+// Trend arrows styling
+.trend-arrow {
+  font-size: 1.2rem;
+  margin-left: 0.5rem;
+  font-weight: bold;
+}
+
+.bullish .trend-arrow { color: var(--long-color); }
+.bearish .trend-arrow { color: var(--short-color); }
+
+// RSI zone indicators
+.zone-indicator {
+  font-size: 0.75rem;
+  font-weight: bold;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  margin-left: 0.5rem;
+
+  &.bullish {
+    background: var(--long-color);
+    color: var(--bg-primary);
+  }
+  &.bearish {
+    background: var(--short-color);
+    color: var(--bg-primary);
+  }
+  &.neutral {
+    background: var(--neutral-color);
+    color: var(--bg-primary);
+  }
+}
+
+// VWAP status styling
+.vwap-status {
+  font-size: 0.75rem;
+  font-weight: bold;
+  margin-left: 0.5rem;
+
+  &.bullish { color: var(--long-color); }
+  &.bearish { color: var(--short-color); }
+}
+
+// Bollinger Bands position indicator
+.bb-status {
+  grid-column: 1 / -1;
+}
+
+.bb-position-indicator {
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+
+// Color coding for text spans
+.bullish { color: var(--long-color); }
+.bearish { color: var(--short-color); }
+.long-text { color: var(--long-color); }
+.short-text { color: var(--short-color); }
 
 .consensus-badge {
   padding: 0.75rem;
