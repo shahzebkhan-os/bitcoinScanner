@@ -94,30 +94,435 @@
   padding: 0.5rem;
   background: var(--bg-elevated);
   border-radius: 4px;
+  transition: background-color 0.3s ease;
 }
 
-.consensus-badge {
-  padding: 0.75rem;
-  text-align: center;
+// Trend-based color coding for indicators
+.indicator-item.bullish {
+  border-left: 3px solid var(--long-color);
+  background: rgba(0, 212, 163, 0.05);
+
+  .trend-arrow, .bb-position-indicator { color: var(--long-color); }
+}
+
+.indicator-item.bearish {
+  border-left: 3px solid var(--short-color);
+  background: rgba(240, 75, 92, 0.05);
+
+  .trend-arrow, .bb-position-indicator { color: var(--short-color); }
+}
+
+.indicator-item.neutral {
+  border-left: 3px solid var(--neutral-color);
+
+  .trend-arrow { color: var(--neutral-color); }
+}
+
+// Trend arrows styling
+.trend-arrow {
   font-size: 1.2rem;
+  margin-left: 0.5rem;
   font-weight: bold;
+}
+
+.bullish .trend-arrow { color: var(--long-color); }
+.bearish .trend-arrow { color: var(--short-color); }
+
+// RSI zone indicators
+.zone-indicator {
+  font-size: 0.75rem;
+  font-weight: bold;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  margin-left: 0.5rem;
+
+  &.bullish {
+    background: var(--long-color);
+    color: var(--bg-primary);
+  }
+  &.bearish {
+    background: var(--short-color);
+    color: var(--bg-primary);
+  }
+  &.neutral {
+    background: var(--neutral-color);
+    color: var(--bg-primary);
+  }
+}
+
+// VWAP status styling
+.vwap-status {
+  font-size: 0.75rem;
+  font-weight: bold;
+  margin-left: 0.5rem;
+
+  &.bullish { color: var(--long-color); }
+  &.bearish { color: var(--short-color); }
+}
+
+// Bollinger Bands position indicator
+.bb-status {
+  grid-column: 1 / -1;
+}
+
+.bb-position-indicator {
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+
+// Color coding for text spans
+.bullish { color: var(--long-color); }
+.bearish { color: var(--short-color); }
+.long-text { color: var(--long-color); }
+.short-text { color: var(--short-color); }
+
+// Phase 2: Price change indicator
+.price-change {
+  font-size: 1.2rem;
+  margin-left: 1rem;
+  font-weight: 600;
+  transition: color 0.3s ease;
+
+  &.positive { color: var(--long-color); }
+  &.negative { color: var(--short-color); }
+}
+
+// Phase 2: Overall trend summary
+.trend-summary {
+  padding: 0.75rem;
+  margin: 1rem 0;
+  border-radius: 6px;
+  text-align: center;
+  font-weight: bold;
+  transition: all 0.4s ease;
+
+  .trend-label {
+    font-size: 0.85rem;
+    opacity: 0.8;
+    margin-right: 0.5rem;
+  }
+
+  .trend-value {
+    font-size: 1.1rem;
+    letter-spacing: 1px;
+  }
+
+  &.bullish {
+    background: rgba(0, 212, 163, 0.15);
+    color: var(--long-color);
+    border: 2px solid var(--long-color);
+  }
+
+  &.bearish {
+    background: rgba(240, 75, 92, 0.15);
+    color: var(--short-color);
+    border: 2px solid var(--short-color);
+  }
+
+  &.neutral {
+    background: rgba(123, 127, 150, 0.1);
+    color: var(--neutral-color);
+    border: 2px solid var(--neutral-color);
+  }
+}
+
+// Phase 2: Volume status badge
+.volume-status {
+  font-size: 0.65rem;
+  font-weight: bold;
+  background: var(--accent);
+  color: var(--bg-primary);
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  margin-left: 0.5rem;
+  animation: blink 1.5s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+// Phase 2: RSI Gauge
+.rsi-gauge-container {
+  margin-top: 1.5rem;
+  padding: 1rem 0;
+}
+
+.rsi-gauge {
+  position: relative;
+  height: 8px;
+  background: linear-gradient(to right,
+    var(--long-color) 0%,
+    var(--long-color) 30%,
+    var(--neutral-color) 30%,
+    var(--neutral-color) 70%,
+    var(--short-color) 70%,
+    var(--short-color) 100%
+  );
+  border-radius: 4px;
+  margin: 0.5rem 0;
+}
+
+.rsi-zones {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+
+  .zone {
+    &.oversold { color: var(--long-color); }
+    &.overbought { color: var(--short-color); }
+  }
+}
+
+.rsi-indicator {
+  position: absolute;
+  top: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  border: 3px solid var(--bg-surface);
+  transition: left 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+
+  &.bullish { background: var(--long-color); }
+  &.bearish { background: var(--short-color); }
+  &.neutral { background: var(--neutral-color); }
+}
+
+// Phase 3: Enhanced consensus badge
+.consensus-badge {
+  padding: 1rem;
+  text-align: center;
   border-radius: 8px;
+  margin-bottom: 1rem;
+  transition: all 0.4s ease;
+
+  .consensus-direction {
+    font-size: 1.4rem;
+    font-weight: bold;
+    margin-bottom: 0.25rem;
+  }
+
+  .consensus-strength {
+    font-size: 0.85rem;
+    opacity: 0.9;
+  }
+
+  &.long {
+    background: var(--long-color);
+    color: var(--bg-primary);
+  }
+
+  &.short {
+    background: var(--short-color);
+    color: var(--bg-primary);
+  }
+
+  &.neutral {
+    background: var(--neutral-color);
+    color: var(--bg-primary);
+  }
+
+  // Consensus strength variations
+  &.strong {
+    box-shadow: 0 4px 16px rgba(247, 147, 26, 0.4);
+    animation: strongPulse 2s ease-in-out infinite;
+  }
+
+  &.moderate {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+
+  &.weak {
+    opacity: 0.7;
+  }
+}
+
+@keyframes strongPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+}
+
+// Phase 3: Vote breakdown with strategy dots
+.vote-breakdown {
+  text-align: center;
   margin-bottom: 1rem;
 }
 
-.consensus-badge.long {
-  background: var(--long-color);
-  color: var(--bg-primary);
+.vote-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
 }
 
-.consensus-badge.short {
-  background: var(--short-color);
-  color: var(--bg-primary);
+.vote-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  cursor: help;
+  transition: all 0.3s ease;
+
+  &.long {
+    background: var(--long-color);
+    border-color: var(--long-color);
+    box-shadow: 0 0 10px rgba(0, 212, 163, 0.5);
+  }
+
+  &.short {
+    background: var(--short-color);
+    border-color: var(--short-color);
+    box-shadow: 0 0 10px rgba(240, 75, 92, 0.5);
+  }
+
+  &.neutral {
+    background: var(--bg-elevated);
+    border-color: var(--neutral-color);
+  }
+
+  &:hover {
+    transform: scale(1.2);
+  }
 }
 
-.consensus-badge.neutral {
-  background: var(--neutral-color);
-  color: var(--bg-primary);
+.last-change {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+// Phase 4: Enhanced animations
+.strategy-card {
+  background: var(--bg-elevated);
+  padding: 0.75rem;
+  border-radius: 4px;
+  border-left: 3px solid var(--border);
+  transition: all 0.3s ease;
+
+  &:hover {
+    transform: translateX(4px);
+    border-left-color: var(--accent);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+}
+
+.signal-row {
+  display: grid;
+  grid-template-columns: 80px 120px 120px 60px 80px;
+  gap: 1rem;
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  background: var(--bg-elevated);
+  border-radius: 4px;
+  border-left: 3px solid var(--border);
+  transition: all 0.3s ease;
+  animation: slideIn 0.4s ease-out;
+
+  &:hover {
+    transform: translateX(4px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+
+  &.long { border-left-color: var(--long-color); }
+  &.short { border-left-color: var(--short-color); }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+// Phase 4: Enhanced mobile responsiveness
+@media (max-width: 1200px) {
+  .main-content {
+    grid-template-columns: 1fr;
+  }
+
+  .current-price {
+    font-size: 2rem;
+  }
+
+  .price-change {
+    font-size: 1rem;
+    display: block;
+    margin-left: 0;
+    margin-top: 0.5rem;
+  }
+
+  .indicator-row {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .signal-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+
+    .signal-time, .signal-votes {
+      display: none;
+    }
+  }
+
+  .strategies-list {
+    max-height: 400px;
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard {
+    padding: 0.5rem;
+  }
+
+  .status-bar {
+    flex-direction: column;
+    gap: 0.5rem;
+    text-align: center;
+  }
+
+  .panel {
+    padding: 0.75rem;
+  }
+
+  .current-price {
+    font-size: 1.75rem;
+  }
+
+  .indicator-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .vote-dots {
+    flex-wrap: wrap;
+  }
+
+  .consensus-badge .consensus-direction {
+    font-size: 1.1rem;
+  }
+}
+
+// Phase 4: Accessibility improvements
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.strategy-card, .signal-row, .vote-dot {
+  &:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
 }
 
 .strategies-list {
@@ -126,13 +531,6 @@
   gap: 0.75rem;
   max-height: 500px;
   overflow-y: auto;
-}
-
-.strategy-card {
-  background: var(--bg-elevated);
-  padding: 0.75rem;
-  border-radius: 4px;
-  border-left: 3px solid var(--border);
 }
 
 .strategy-header {
@@ -192,25 +590,6 @@
   overflow-y: auto;
 }
 
-.signal-row {
-  display: grid;
-  grid-template-columns: 80px 120px 120px 60px 80px;
-  gap: 1rem;
-  padding: 0.75rem;
-  margin-bottom: 0.5rem;
-  background: var(--bg-elevated);
-  border-radius: 4px;
-  border-left: 3px solid var(--border);
-}
-
-.signal-row.long {
-  border-left-color: var(--long-color);
-}
-
-.signal-row.short {
-  border-left-color: var(--short-color);
-}
-
 .signal-direction.long {
   color: var(--long-color);
 }
@@ -223,15 +602,4 @@
   text-align: center;
   padding: 2rem;
   color: var(--text-secondary);
-}
-
-@media (max-width: 1200px) {
-  .main-content {
-    grid-template-columns: 1fr;
-  }
-
-  .signal-row {
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 0.5rem;
-  }
 }
