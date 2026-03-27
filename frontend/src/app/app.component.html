@@ -14,6 +14,14 @@
         <div class="price-display">
           <div class="current-price">
             ${{ (scannerData.latestIndicators$ | async)?.currentPrice | number:'1.2-2' || '---' }}
+            <span class="price-change" [class.positive]="priceChange > 0" [class.negative]="priceChange < 0">
+              {{ priceChange > 0 ? '▲' : priceChange < 0 ? '▼' : '—' }}
+              {{ priceChangePercent | number:'1.2-2' }}%
+            </span>
+          </div>
+          <div class="trend-summary" [class]="getOverallTrendClass(scannerData.latestIndicators$ | async)">
+            <span class="trend-label">Overall Trend:</span>
+            <span class="trend-value">{{ getOverallTrend(scannerData.latestIndicators$ | async) }}</span>
           </div>
           <div class="indicator-row">
             <span [class.bullish]="getRsiZoneClass(scannerData.latestIndicators$ | async) === 'bullish'"
@@ -24,9 +32,27 @@
               </span>
             </span>
             <span [class]="getVolumeTrendClass(scannerData.latestIndicators$ | async)">
-              Volume Ratio: {{ (scannerData.latestIndicators$ | async)?.volumeRatio | number:'1.2-2' || '---' }}x
+              Volume: {{ (scannerData.latestIndicators$ | async)?.volumeRatio | number:'1.2-2' || '---' }}x
               <span class="trend-arrow">{{ getVolumeTrend(scannerData.latestIndicators$ | async) }}</span>
+              <span class="volume-status" *ngIf="((scannerData.latestIndicators$ | async)?.volumeRatio ?? 0) > 2">
+                HIGH
+              </span>
             </span>
+          </div>
+
+          <!-- Phase 2: Visual RSI Gauge -->
+          <div class="rsi-gauge-container">
+            <div class="rsi-gauge">
+              <div class="rsi-zones">
+                <div class="zone oversold">0</div>
+                <div class="zone neutral">50</div>
+                <div class="zone overbought">100</div>
+              </div>
+              <div class="rsi-indicator"
+                   [style.left.%]="(scannerData.latestIndicators$ | async)?.rsi || 0"
+                   [class]="getRsiZoneClass(scannerData.latestIndicators$ | async)">
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -110,10 +136,30 @@
         <h2>Strategy Votes</h2>
         <div class="consensus-display">
           <div *ngIf="scannerData.consensus$ | async as consensus"
-               [class]="'consensus-badge ' + consensus.direction.toLowerCase()">
-            {{ consensus.direction }} {{ consensus.longVotes + consensus.shortVotes }}/6
+               [class]="'consensus-badge ' + consensus.direction.toLowerCase() + ' ' + getConsensusStrengthClass(consensus)">
+            <div class="consensus-direction">{{ consensus.direction }} {{ consensus.longVotes + consensus.shortVotes }}/6</div>
+            <div class="consensus-strength">
+              Strength: {{ consensus.avgStrength | number:'1.2-2' }}
+            </div>
+          </div>
+
+          <!-- Phase 3: Visual vote breakdown with 6 strategy dots -->
+          <div class="vote-breakdown" *ngIf="scannerData.strategyVotes$ | async as strategies">
+            <div class="vote-dots">
+              <div *ngFor="let strategy of strategies"
+                   class="vote-dot"
+                   [class.long]="strategy.direction === 'LONG'"
+                   [class.short]="strategy.direction === 'SHORT'"
+                   [class.neutral]="strategy.direction === 'NEUTRAL'"
+                   [title]="strategy.strategyName + ': ' + strategy.direction">
+              </div>
+            </div>
+            <div class="last-change" *ngIf="lastConsensusChangeTime">
+              Last change: {{ getTimeSinceLastChange() }}
+            </div>
           </div>
         </div>
+
         <div class="strategies-list">
           <div *ngFor="let strategy of (scannerData.strategyVotes$ | async)"
                class="strategy-card">
