@@ -11,6 +11,7 @@ import logging
 import csv
 import os
 from datetime import datetime
+from typing import Optional
 from pathlib import Path
 
 from scanner.indicators import IndicatorSnapshot
@@ -28,7 +29,7 @@ CSV_HEADERS = [
 ]
 
 
-def log_signal(consensus: ConsensusResult, snapshot: IndicatorSnapshot, trade_levels: dict | None = None):
+def log_signal(consensus: ConsensusResult, snapshot: IndicatorSnapshot, trade_levels: Optional[dict] = None):
     """
     Log signal to CSV file.
 

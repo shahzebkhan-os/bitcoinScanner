@@ -55,7 +55,7 @@ import { Subscription } from 'rxjs';
   `]
 })
 export class CandlestickChartComponent implements OnInit, OnDestroy {
-  private static readonly MAX_MARKERS = 50;
+  private static readonly MAX_MARKERS = 5000; // raised for historical backtest mode
   private static readonly HORIZONTAL_WINDOW_CANDLES = 120;
   private static readonly DEFAULT_STOP_LOSS_PCT = 0.002;
   private static readonly EMA_FAST_PERIOD = 9;
@@ -103,6 +103,13 @@ export class CandlestickChartComponent implements OnInit, OnDestroy {
             this.candlestickSeries.setData(chartData);
             this.chart.timeScale().fitContent();
             isInitialData = false;
+
+            // RACE CONDITION FIX: Replay historical markers now that we have candles
+            const history = this.scannerData.signalOverlays$.value;
+            if (history.length > 0 && !this.scannerData.historyReplayConsumed$.value) {
+              this.replayHistoryMarkers(history);
+              this.scannerData.historyReplayConsumed$.next(true);
+            }
           } else {
             // Incremental update for the latest candle
             const latest = candles[candles.length - 1];
@@ -132,11 +139,44 @@ export class CandlestickChartComponent implements OnInit, OnDestroy {
     this.subscriptions.push(
       this.scannerData.signalOverlays$.subscribe(overlays => {
         if (!overlays || overlays.length === 0) return;
-        if (!this.scannerData.historyReplayConsumed$.value) {
-          this.replayHistoryMarkers(overlays);
-          this.scannerData.historyReplayConsumed$.next(true);
+        
+        // If we have history candles, use them for replaying markers
+        const hCandles = this.scannerData.historyCandles$.value;
+        if (hCandles.length > 0) {
+          this.replayHistoryMarkers(overlays, hCandles);
+        } else {
+          // Normal real-time flow
+          const candles = this.scannerData.candles$.value;
+          if (candles.length > 0 && !this.scannerData.historyReplayConsumed$.value) {
+            this.replayHistoryMarkers(overlays);
+            this.scannerData.historyReplayConsumed$.next(true);
+          }
         }
-        this.renderOverlay(overlays[0]);
+        
+        if (overlays.length > 0) {
+          this.renderOverlay(overlays[0]);
+        }
+      })
+    );
+
+    // Subscribe to history requests
+    this.subscriptions.push(
+      this.scannerData.historyCandles$.subscribe(candles => {
+        if (candles && candles.length > 0) {
+          const chartData: CandlestickData[] = candles.map(c => ({
+            time: this.candleTimeInSeconds(c) as any,
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close
+          }));
+          this.candlestickSeries.setData(chartData);
+          this.chart.timeScale().fitContent();
+          
+          // Markers will be replayed after signalOverlays$ fires (see subscription above)
+          // because signals are pushed AFTER historyCandles$ in loadChartHistory
+          this.updateIndicatorOverlays(candles);
+        }
       })
     );
   }
@@ -432,7 +472,7 @@ export class CandlestickChartComponent implements OnInit, OnDestroy {
     const target = consensus.direction === 'LONG' ? entry + (risk * targetRr) : entry - (risk * targetRr);
 
     const votes = Math.max(consensus.longVotes, consensus.shortVotes);
-    const text = `${consensus.direction} ${votes}/6 | E:${entry.toFixed(2)} SL:${stopLoss.toFixed(2)} TP:${target.toFixed(2)}`;
+    const text = consensus.direction === 'LONG' ? '▲ BUY' : '▼ SELL';
 
     this.markers.push({
       time: latestTime as any,
@@ -440,6 +480,7 @@ export class CandlestickChartComponent implements OnInit, OnDestroy {
       color,
       shape,
       text,
+      size: 2,
     });
     this.markers = this.markers
       .slice(-CandlestickChartComponent.MAX_MARKERS)
@@ -461,41 +502,79 @@ export class CandlestickChartComponent implements OnInit, OnDestroy {
     this.targetLineSeries.setData(horizontalWindow.map((p) => ({ ...p, value: overlay.target })));
   }
 
-  private replayHistoryMarkers(overlays: TradeLevels[]): void {
+  private replayHistoryMarkers(overlays: TradeLevels[], displayCandles?: Candle[]): void {
     if (overlays.length === 0) return;
-    const candles = this.scannerData.candles$.value;
+    const candles = displayCandles || this.scannerData.candles$.value;
     if (candles.length === 0) return;
 
     const firstCandleTime = this.candleTimeInSeconds(candles[0]);
     const lastCandleTime = this.candleTimeInSeconds(candles[candles.length - 1]);
 
-    const rawHistoryMarkers = overlays
-      .filter((overlay) => !!overlay.timestamp)
-      .map((overlay) => {
-        const ts = typeof overlay.timestamp === 'string' ? overlay.timestamp : '';
-        const parsedTime = new Date(ts).getTime();
-        if (Number.isNaN(parsedTime)) {
-          return null;
+    /** Binary-search the nearest candle timestamp for a given UTC-second time */
+    const snapToCandle = (markerTime: number): number => {
+      let clamped = Math.min(Math.max(markerTime, firstCandleTime), lastCandleTime);
+      let lo = 0, hi = candles.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (this.candleTimeInSeconds(candles[mid]) < clamped) lo = mid + 1;
+        else hi = mid;
+      }
+      if (lo > 0) {
+        const tLo = this.candleTimeInSeconds(candles[lo - 1]);
+        const tHi = this.candleTimeInSeconds(candles[lo]);
+        return Math.abs(tLo - clamped) <= Math.abs(tHi - clamped) ? tLo : tHi;
+      }
+      return this.candleTimeInSeconds(candles[lo]);
+    };
+
+    const allMarkers: SeriesMarker<any>[] = [];
+
+    for (const overlay of overlays) {
+      if (!overlay.timestamp) continue;
+      const entryParsed = new Date(overlay.timestamp).getTime();
+      if (Number.isNaN(entryParsed)) continue;
+
+      const entryTime = snapToCandle(Math.floor(entryParsed / 1000));
+      const isLong = (overlay.direction || 'LONG') === 'LONG';
+
+      // Entry marker
+      allMarkers.push({
+        time: entryTime as any,
+        position: (isLong ? 'belowBar' : 'aboveBar') as 'belowBar' | 'aboveBar',
+        color: isLong ? '#00d4a3' : '#f04b5c',
+        shape: (isLong ? 'arrowUp' : 'arrowDown') as 'arrowUp' | 'arrowDown',
+        text: isLong ? '▲ BUY' : '▼ SELL',
+        size: 2,
+      });
+
+      // Exit marker (only if within the displayed range)
+      if (overlay.exitTimestamp) {
+        const exitParsed = new Date(overlay.exitTimestamp).getTime();
+        if (!Number.isNaN(exitParsed)) {
+          const exitSecRaw = Math.floor(exitParsed / 1000);
+          if (exitSecRaw >= firstCandleTime && exitSecRaw <= lastCandleTime) {
+            const exitTime = snapToCandle(exitSecRaw);
+            const isTarget   = overlay.exitType === 'target';
+            const isStopLoss = overlay.exitType === 'stoploss';
+            const exitColor  = isTarget ? '#00d4a3' : '#f7931a';   // green for target, orange for stop
+            const exitText   = isTarget ? '✓ TP' : (isStopLoss ? '✗ SL' : '● EXIT');
+
+            allMarkers.push({
+              time: exitTime as any,
+              position: (isLong ? 'aboveBar' : 'belowBar') as 'aboveBar' | 'belowBar',
+              color: exitColor,
+              shape: 'circle' as 'circle',
+              text: exitText,
+              size: 1,
+            });
+          }
         }
-        const markerTime = Math.floor(parsedTime / 1000);
-        const clampedTime = Math.min(Math.max(markerTime, firstCandleTime), lastCandleTime);
-        const isLong = (overlay.direction || 'LONG') === 'LONG';
-        return {
-          time: clampedTime as any,
-          position: (isLong ? 'belowBar' : 'aboveBar') as 'belowBar' | 'aboveBar',
-          color: isLong ? '#00d4a3' : '#f04b5c',
-          shape: (isLong ? 'arrowUp' : 'arrowDown') as 'arrowUp' | 'arrowDown',
-          text: `${isLong ? 'LONG' : 'SHORT'} E:${overlay.entry.toFixed(2)} SL:${overlay.stopLoss.toFixed(2)} TP:${overlay.target.toFixed(2)}`,
-        };
-      })
-      .filter((marker) => marker !== null)
-      .slice(0, CandlestickChartComponent.MAX_MARKERS);
+      }
+    }
 
-    const historyMarkers = (rawHistoryMarkers as SeriesMarker<any>[])
-      .sort((a, b) => (a.time as number) - (b.time as number));
-
-    if (historyMarkers.length > 0) {
-      this.markers = historyMarkers;
+    const sorted = allMarkers.sort((a, b) => (a.time as number) - (b.time as number));
+    if (sorted.length > 0) {
+      this.markers = sorted;
       this.candlestickSeries.setMarkers(this.markers);
     }
   }

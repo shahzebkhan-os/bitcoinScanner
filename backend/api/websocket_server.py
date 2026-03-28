@@ -9,7 +9,7 @@ Responsibilities:
 
 import logging
 import json
-from typing import List
+from typing import List, Optional, Union
 from fastapi import WebSocket, WebSocketDisconnect
 
 from scanner.indicators import IndicatorSnapshot
@@ -75,9 +75,9 @@ async def broadcast_tick(
     snapshot: IndicatorSnapshot,
     results: list[SignalResult],
     consensus: ConsensusResult,
-    overall_trend: dict | None = None,
-    strategies_by_interval: dict | None = None,
-    consensus_by_interval: dict | None = None,
+    overall_trend: Optional[dict] = None,
+    strategies_by_interval: Optional[dict] = None,
+    consensus_by_interval: Optional[dict] = None,
 ):
     """
     Broadcast tick data to all connected clients.
@@ -117,7 +117,7 @@ async def broadcast_tick(
         logger.error(f"Error broadcasting tick: {e}")
 
 
-async def broadcast_signal(consensus: ConsensusResult, snapshot: IndicatorSnapshot, trade_levels: dict | None = None):
+async def broadcast_signal(consensus: ConsensusResult, snapshot: IndicatorSnapshot, trade_levels: Optional[dict] = None):
     """
     Broadcast signal message when consensus fires.
 

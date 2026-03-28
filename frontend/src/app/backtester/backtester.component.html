@@ -1,0 +1,254 @@
+<div class="backtester-layout">
+
+  <!-- ── Controls Sidebar ─────────────────────────────── -->
+  <aside class="controls-panel">
+    <div class="controls-header">
+      <h2>⚙️ Strategy Config</h2>
+    </div>
+
+    <div class="control-group">
+      <label>Pair</label>
+      <select [(ngModel)]="params.pair">
+        <option value="BTCUSDT">BTC/USDT</option>
+        <option value="ETHUSDT">ETH/USDT</option>
+      </select>
+    </div>
+
+    <div class="control-group">
+      <label>Interval</label>
+      <div class="btn-group">
+        <button *ngFor="let iv of intervalOptions" [class.active]="params.interval === iv"
+          (click)="params.interval = iv">{{ iv }}</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label>Candles</label>
+      <div class="btn-group">
+        <button *ngFor="let l of limitOptions" [class.active]="params.limit === l" (click)="params.limit = l">{{ l >=
+          1000 ? (l/1000)+'k' : l }}</button>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <p class="section-title">💰 Capital & Position Size</p>
+
+    <div class="control-group">
+      <label>Initial Capital ($)</label>
+      <input type="number" min="100" step="100" [(ngModel)]="params.initialCapital" />
+    </div>
+
+    <div class="control-group">
+      <label>
+        Per-Trade Amount ($)
+        <span class="hint-inline">0 = use % of capital</span>
+      </label>
+      <input type="number" min="0" step="10" [(ngModel)]="params.tradeAmount" />
+    </div>
+
+    <div class="control-group" *ngIf="params.tradeAmount === 0">
+      <label>Trade Size <span class="value-badge">{{ params.tradeSizePct }}%</span></label>
+      <input type="range" min="1" max="100" step="1" [(ngModel)]="params.tradeSizePct" />
+    </div>
+
+    <div class="divider"></div>
+    <p class="section-title">Consensus</p>
+
+    <div class="control-group">
+      <label>Min Votes <span class="value-badge">{{ params.minVotes }}/6</span></label>
+      <input type="range" min="1" max="6" step="1" [(ngModel)]="params.minVotes" />
+    </div>
+
+    <div class="divider"></div>
+    <p class="section-title">Indicators</p>
+
+    <div class="control-row">
+      <div class="control-group">
+        <label>RSI Oversold</label>
+        <input type="number" min="10" max="45" [(ngModel)]="params.rsiOversold" />
+      </div>
+      <div class="control-group">
+        <label>RSI Overbought</label>
+        <input type="number" min="55" max="90" [(ngModel)]="params.rsiOverbought" />
+      </div>
+    </div>
+
+    <div class="control-row">
+      <div class="control-group">
+        <label>EMA Fast</label>
+        <input type="number" min="3" max="50" [(ngModel)]="params.emaFast" />
+      </div>
+      <div class="control-group">
+        <label>EMA Slow</label>
+        <input type="number" min="10" max="200" [(ngModel)]="params.emaSlow" />
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <p class="section-title">Exit Sensitivity</p>
+
+    <div class="control-group">
+      <label>Min Exit Votes <span class="value-badge">{{ params.minExitVotes }}/6</span></label>
+      <input type="range" min="1" max="6" step="1" [(ngModel)]="params.minExitVotes" />
+      <span class="hint">Lower = exits quicker on reversal signal</span>
+    </div>
+
+    <div class="divider"></div>
+    <p class="section-title">🛡️ Filters</p>
+
+    <div class="filter-row">
+      <label class="toggle-label">
+        <input type="checkbox" [(ngModel)]="params.useTrendFilter" />
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        Trend Filter
+      </label>
+      <span class="filter-desc">EMA alignment must match direction</span>
+    </div>
+
+    <div class="filter-row">
+      <label class="toggle-label">
+        <input type="checkbox" [(ngModel)]="params.useVolumeFilter" />
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        Volume Confirm
+      </label>
+      <span class="filter-desc">Volume ≥ {{ params.volMultiplier }}× avg</span>
+    </div>
+    <div class="control-group" *ngIf="params.useVolumeFilter">
+      <label>Vol Multiplier <span class="value-badge">{{ params.volMultiplier }}</span></label>
+      <input type="range" min="1.0" max="3.0" step="0.1" [(ngModel)]="params.volMultiplier" />
+    </div>
+
+    <div class="filter-row">
+      <label class="toggle-label">
+        <input type="checkbox" [(ngModel)]="params.useHtfBias" />
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        HTF Bias
+      </label>
+      <span class="filter-desc">~15m trend must agree</span>
+    </div>
+    <div class="control-group" *ngIf="params.useHtfBias">
+      <label>HTF EMA Period <span class="value-badge">{{ params.htfEmaPeriod }}</span></label>
+      <input type="range" min="50" max="300" step="10" [(ngModel)]="params.htfEmaPeriod" />
+    </div>
+
+    <div class="divider"></div>
+
+    <button class="run-btn" (click)="runBacktest()" [disabled]="isLoading">
+      <span *ngIf="!isLoading">▶ Run Backtest</span>
+      <span *ngIf="isLoading">⌛ Running...</span>
+    </button>
+
+    <div class="error-msg" *ngIf="errorMessage">⚠ {{ errorMessage }}</div>
+  </aside>
+
+  <!-- ── Main Content ─────────────────────────────────── -->
+  <main class="main-area">
+
+    <!-- Stats Grid (8 cards, reordered for clarity) -->
+    <div class="stats-grid" *ngIf="stats">
+      <!-- Col 1: Summary -->
+      <div class="stat-card">
+        <div class="stat-label">Total Trades</div>
+        <div class="stat-value">{{ stats.totalTrades }}</div>
+        <div class="stat-sub">{{ stats.openTrades }} open</div>
+      </div>
+      <div class="stat-card" [class.positive]="stats.totalPnl > 0" [class.negative]="stats.totalPnl < 0">
+        <div class="stat-label">Net Profit/Loss</div>
+        <div class="stat-value">${{ stats.totalPnl | number:'1.2-2' }}</div>
+        <div class="stat-sub">Capital: ${{ stats.finalCapital | number:'1.0-0' }}</div>
+      </div>
+
+      <!-- Col 2: Gross Returns -->
+      <div class="stat-card positive">
+        <div class="stat-label">Gross Profit</div>
+        <div class="stat-value">+${{ stats.totalProfit | number:'1.2-2' }}</div>
+        <div class="stat-sub">{{ stats.wins }} wins</div>
+      </div>
+      <div class="stat-card negative">
+        <div class="stat-label">Gross Loss</div>
+        <div class="stat-value">-${{ (stats.totalLoss * -1) | number:'1.2-2' }}</div>
+        <div class="stat-sub">{{ stats.losses }} losses</div>
+      </div>
+
+      <!-- Col 3: Ratios -->
+      <div class="stat-card" [class.positive]="stats.winRate >= 50" [class.negative]="stats.winRate < 50">
+        <div class="stat-label">Win Rate</div>
+        <div class="stat-value">{{ stats.winRate }}%</div>
+        <div class="stat-sub">{{ stats.wins }} / {{ stats.losses }}</div>
+      </div>
+      <div class="stat-card" [class.negative]="stats.maxDrawdown > 5">
+        <div class="stat-label">Max Drawdown</div>
+        <div class="stat-value">{{ stats.maxDrawdown }}%</div>
+      </div>
+
+      <!-- Col 4: Directional -->
+      <div class="stat-card positive">
+        <div class="stat-label">Long Performance</div>
+        <div class="stat-value highlight">{{ stats.longWins }}<span class="stat-of">W / {{ stats.longTotal }}T</span>
+        </div>
+        <div class="stat-sub">{{ stats.longTotal > 0 ? ((stats.longWins / stats.longTotal * 100) | number:'1.0-0') : 0
+          }}% accuracy</div>
+      </div>
+      <div class="stat-card positive">
+        <div class="stat-label">Short Performance</div>
+        <div class="stat-value highlight">{{ stats.shortWins }}<span class="stat-of">W / {{ stats.shortTotal }}T</span>
+        </div>
+        <div class="stat-sub">{{ stats.shortTotal > 0 ? ((stats.shortWins / stats.shortTotal * 100) | number:'1.0-0') :
+          0 }}% accuracy</div>
+      </div>
+    </div>
+
+    <!-- Chart Section (Fixed height) -->
+    <div class="chart-section">
+      <div class="chart-legend">
+        <span class="leg buy">▲ BUY</span>
+        <span class="leg sell">▼ SELL</span>
+        <span class="leg profit">🟢 PROFIT EXIT</span>
+        <span class="leg loss">🔴 LOSS EXIT</span>
+      </div>
+      <div #btChartContainer class="bt-chart"></div>
+    </div>
+
+    <!-- Trades Section (Takes remaining space, scrolls internally) -->
+    <div class="trades-section" *ngIf="trades.length > 0">
+      <div class="trades-header">
+        <h3>Trade Log <span class="badge">{{ trades.length }}</span></h3>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Dir</th>
+              <th>Entry</th>
+              <th>Exit</th>
+              <th>Type</th>
+              <th>P&amp;L</th>
+              <th>Result</th>
+              <th>Votes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let t of trades" [class]="t.result.toLowerCase()">
+              <td>{{ t.timestamp | date:'MM/dd HH:mm' }}</td>
+              <td [class]="t.direction.toLowerCase()">{{ t.direction === 'LONG' ? '▲' : '▼' }} {{ t.direction }}</td>
+              <td>${{ t.entry | number:'1.2-2' }}</td>
+              <td>${{ t.exit | number:'1.2-2' }}</td>
+              <td><span [class]="'exit-pill ' + t.exitType">{{ t.exitType | uppercase }}</span></td>
+              <td [class]="getPnlClass(t.pnl)">${{ t.pnl | number:'1.2-2' }}</td>
+              <td><span [class]="'result-pill ' + t.result.toLowerCase()">{{ t.result }}</span></td>
+              <td>{{ t.votes }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Loading state -->
+    <div class="loading-overlay" *ngIf="isLoading">
+      <div class="spinner">⌛</div>
+      <span>Running backtest...</span>
+    </div>
+
+  </main>
+</div>

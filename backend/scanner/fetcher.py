@@ -20,9 +20,13 @@ from datetime import datetime, timezone
 logger = logging.getLogger(__name__)
 
 
+NATIVE_BINANCE_INTERVALS = ["1s", "1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M"]
+
+
 async def fetch_candles(pair: str, interval: str, limit: int) -> Optional[pd.DataFrame]:
     """
     Fetch candles from Binance public API (primary) with CoinDCX fallback.
+    Aggregates from 1m if interval is not natively supported.
 
     Args:
         pair: Trading pair (e.g., "BTCUSDT")
@@ -32,14 +36,46 @@ async def fetch_candles(pair: str, interval: str, limit: int) -> Optional[pd.Dat
     Returns:
         DataFrame with columns: [time, open, high, low, close, volume]
     """
-    # Try Binance first (reliable, real-time data)
-    df = await _fetch_candles_binance(pair, interval, limit)
-    if df is not None:
-        return df
+    # Check if native support exists
+    if interval in NATIVE_BINANCE_INTERVALS:
+        # Try Binance first (reliable, real-time data)
+        df = await _fetch_candles_binance(pair, interval, limit)
+        if df is not None:
+            return df
 
-    # Fallback to CoinDCX
-    logger.warning("Binance candle API failed, trying CoinDCX fallback...")
-    return await _fetch_candles_coindcx(pair, interval, limit)
+        # Fallback to CoinDCX
+        logger.warning(f"Binance native candle API failed for {interval}, trying CoinDCX fallback...")
+        return await _fetch_candles_coindcx(pair, interval, limit)
+    
+    # Not natively supported, try to aggregate from 1m
+    if interval.endswith('m'):
+        try:
+            minutes = int(interval[:-1])
+            logger.info(f"Interval {interval} not native. Fetching 1m and aggregating {minutes}min.")
+            
+            # To get 'limit' candles of 'minutes' size, we need limit * minutes 1m candles
+            # But Binance has a max limit of 1000.
+            needed_1m = min(1000, limit * minutes)
+            df_1m = await fetch_candles(pair, "1m", needed_1m)
+            
+            if df_1m is not None and not df_1m.empty:
+                # Resample 1m to target interval
+                # Use 'min' for minutes in pandas resample
+                df_aggregated = df_1m.set_index('time').resample(f'{minutes}min').agg({
+                    'open': 'first',
+                    'high': 'max',
+                    'low': 'min',
+                    'close': 'last',
+                    'volume': 'sum'
+                }).dropna().reset_index()
+                
+                # Take the last 'limit' candles
+                return df_aggregated.tail(limit).reset_index(drop=True)
+            
+        except ValueError:
+            logger.error(f"Invalid interval format: {interval}")
+    
+    return None
 
 
 async def _fetch_candles_binance(pair: str, interval: str, limit: int) -> Optional[pd.DataFrame]:
@@ -105,6 +141,107 @@ async def _fetch_candles_binance(pair: str, interval: str, limit: int) -> Option
             break
 
     return None
+
+
+async def fetch_candles_paginated(pair: str, interval: str, limit: int) -> Optional[pd.DataFrame]:
+    """
+    Fetch a large number of candles using pagination.
+    Binance limits each request to 1000 candles.
+    """
+    if interval not in NATIVE_BINANCE_INTERVALS and not interval.endswith('m'):
+         return None
+
+    # Handle non-native m intervals by fetching 1m data and aggregating
+    if interval not in NATIVE_BINANCE_INTERVALS:
+        try:
+            minutes = int(interval[:-1])
+            # To get 'limit' candles of 'interval', we need limit * minutes of 1m candles.
+            # We cap this to avoid excessive API calls (e.g., 50k * 5 = 250k candles).
+            # Max 100 paginated requests (100k candles).
+            fetch_limit = min(100000, limit * minutes)
+            logger.info(f"Aggregating {interval} from {fetch_limit} 1m candles...")
+            df_1m = await fetch_candles_paginated(pair, "1m", fetch_limit)
+            
+            if df_1m is not None and not df_1m.empty:
+                 # Use resample to aggregate
+                 df_aggregated = df_1m.set_index('time').resample(f'{minutes}min').agg({
+                    'open': 'first',
+                    'high': 'max',
+                    'low': 'min',
+                    'close': 'last',
+                    'volume': 'sum'
+                 }).dropna().reset_index()
+                 return df_aggregated.tail(limit).reset_index(drop=True)
+            return None
+        except Exception as e:
+            logger.error(f"Error aggregating paginated history: {e}")
+            return None
+
+    # Native Binance pagination
+    all_candles = []
+    end_time = None
+    chunk_size = 1000 
+    remaining = limit
+    
+    url = "https://api.binance.com/api/v3/klines"
+    
+    while remaining > 0:
+        current_limit = min(remaining, chunk_size)
+        params = {
+            "symbol": pair,
+            "interval": interval,
+            "limit": current_limit
+        }
+        if end_time:
+            params["endTime"] = end_time - 1
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=15)) as response:
+                    if response.status != 200:
+                        logger.error(f"Binance pagination error: {response.status}")
+                        break
+                    data = await response.json()
+                    if not data:
+                        break
+                    
+                    # Binance returns data in ASCENDING order [oldest ... newest]
+                    # Since we use endTime, we are moving backwards in time.
+                    all_candles.extend(data)
+                    
+                    # Earliest timestamp in this batch (index 0 of the returned list)
+                    first_ts = data[0][0]
+                    end_time = first_ts
+                    remaining -= len(data)
+                    
+                    if len(data) < current_limit:
+                        break # No more data available
+                    
+                    # Respect rate limits - small delay between pages
+                    await asyncio.sleep(0.05)
+        except Exception as e:
+            logger.error(f"Error in paginated fetch: {e}")
+            break
+
+    if not all_candles:
+        return None
+
+    # Process and sort all collected candles
+    df = pd.DataFrame(all_candles, columns=[
+        'time', 'open', 'high', 'low', 'close', 'volume',
+        'close_time', 'quote_asset_volume', 'number_of_trades',
+        'taker_buy_base', 'taker_buy_quote', 'ignore'
+    ])
+    df = df[['time', 'open', 'high', 'low', 'close', 'volume']]
+    df['time'] = pd.to_datetime(df['time'], unit='ms', utc=True)
+    for col in ['open', 'high', 'low', 'close', 'volume']:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+    
+    # Drop duplicates and sort
+    df = df.drop_duplicates(subset=['time']).sort_values('time').reset_index(drop=True)
+    
+    logger.info(f"Fetched {len(df)} total historical candles for {pair} {interval}")
+    return df
 
 
 async def _fetch_candles_coindcx(pair: str, interval: str, limit: int) -> Optional[pd.DataFrame]:

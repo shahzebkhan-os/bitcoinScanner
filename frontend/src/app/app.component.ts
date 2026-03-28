@@ -4,19 +4,24 @@ import { ScannerDataService } from './core/services/scanner-data.service';
 import { WebsocketService } from './core/services/websocket.service';
 import { IndicatorSnapshot, ConsensusResult, OverallTrend } from './core/models/scanner.models';
 import { CandlestickChartComponent } from './candlestick-chart/candlestick-chart.component';
+import { BacktesterComponent } from './backtester/backtester.component';
 import { Subject, takeUntil } from 'rxjs';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, CandlestickChartComponent],
+  imports: [CommonModule, CandlestickChartComponent, BacktesterComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
   providers: [WebsocketService, ScannerDataService]
 })
 export class AppComponent implements OnInit, OnDestroy {
   title = 'Bitcoin Scanner Dashboard';
+  activeTab: 'dashboard' | 'backtester' = 'dashboard';
   selectedStrategyInterval: string = '1m';
+  selectedChartInterval: string = '1m';
+  selectedHistory: number = 1000;
+  historyOptions = [1000, 10000, 20000, 50000];
 
   // Price tracking for change calculation
   private previousPrice: number = 0;
@@ -148,6 +153,11 @@ export class AppComponent implements OnInit, OnDestroy {
 
   getIntervalConsensus(overallTrend: OverallTrend | null, interval: string): string {
     return overallTrend?.intervals?.[interval]?.consensus || 'N/A';
+  }
+
+  updateHistory(limit: number) {
+    this.selectedHistory = limit;
+    this.scannerData.loadChartHistory('BTCUSDT', this.selectedChartInterval, limit);
   }
 
   getIntervalStrategyVotes(interval: string) {

@@ -19,6 +19,45 @@
   margin: 0;
 }
 
+// ── Tab Navigation ──────────────────────────────────────
+.tab-nav {
+  display: flex;
+  gap: 4px;
+  background: #13151c;
+  border: 1px solid #1e2130;
+  border-radius: 6px;
+  padding: 4px;
+}
+
+.tab-btn {
+  padding: 6px 18px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: #5a5e78;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'JetBrains Mono', monospace;
+  transition: all 0.15s;
+
+  &:hover { color: #e0e3f0; background: #1a1d2e; }
+  &.active {
+    background: #f7931a22;
+    color: #f7931a;
+    border: 1px solid #f7931a55;
+  }
+}
+
+// ── Backtester tab fills remaining page height ──────────
+.backtester-tab {
+  height: calc(100vh - 90px);
+  overflow: hidden;
+  border: 1px solid #1e2130;
+  border-radius: 8px;
+  background: #0d0f17;
+}
+
 .connection-status {
   display: flex;
   align-items: center;
@@ -664,5 +703,57 @@
 
 .chart-panel {
   margin-bottom: 1rem;
-  height: 480px;
+  height: 520px; // Increased height for header row
+}
+
+.panel-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+
+  h2 { margin-bottom: 0 !important; }
+}
+
+.history-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.selector-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.history-btn {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  &.active {
+    background: var(--accent);
+    color: var(--bg-primary);
+    border-color: var(--accent);
+  }
+}
+
+.loading-spinner-small {
+  font-size: 1rem;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }

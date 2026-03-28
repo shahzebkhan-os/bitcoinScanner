@@ -1,0 +1,253 @@
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { CommonModule, DecimalPipe, DatePipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { createChart, IChartApi, ISeriesApi, CandlestickData, SeriesMarker } from 'lightweight-charts';
+
+interface BacktestParams {
+  pair: string;
+  interval: string;
+  limit: number;
+  minVotes: number;
+  minExitVotes: number;
+  rsiOversold: number;
+  rsiOverbought: number;
+  emaFast: number;
+  emaSlow: number;
+  initialCapital: number;
+  tradeAmount: number;       // Fixed $ per trade (0 = use % of capital)
+  tradeSizePct: number;      // % of capital if tradeAmount is 0
+  // Filters
+  useTrendFilter: boolean;
+  useVolumeFilter: boolean;
+  volMultiplier: number;
+  useHtfBias: boolean;
+  htfEmaPeriod: number;
+}
+
+interface BacktestStats {
+  totalTrades: number;
+  wins: number;
+  losses: number;
+  openTrades: number;
+  longWins: number;
+  longTotal: number;
+  shortWins: number;
+  shortTotal: number;
+  winRate: number;
+  totalPnl: number;
+  totalProfit: number;
+  totalLoss: number;
+  maxDrawdown: number;
+  finalCapital: number;
+  initialCapital: number;
+}
+
+interface TradeRow {
+  timestamp: string;
+  direction: string;
+  entry: number;
+  exit: number;
+  exitType: string;
+  pnl: number;
+  result: string;
+  votes: string;
+}
+
+@Component({
+  selector: 'app-backtester',
+  standalone: true,
+  imports: [CommonModule, FormsModule, DecimalPipe, DatePipe],
+  templateUrl: './backtester.component.html',
+  styleUrl: './backtester.component.scss'
+})
+export class BacktesterComponent implements OnInit, OnDestroy {
+  @ViewChild('btChartContainer', { static: true }) chartContainer!: ElementRef;
+
+  private chart!: IChartApi;
+  private candleSeries!: ISeriesApi<'Candlestick'>;
+
+  readonly API_URL = 'http://localhost:8765';
+
+  params: BacktestParams = {
+    pair: 'BTCUSDT',
+    interval: '1m',
+    limit: 1000,
+    minVotes: 3,
+    minExitVotes: 2,
+    rsiOversold: 30,
+    rsiOverbought: 70,
+    emaFast: 9,
+    emaSlow: 21,
+    initialCapital: 10000,
+    tradeAmount: 0,       // 0 = use % of capital
+    tradeSizePct: 10,     // 10% of capital per trade
+    useTrendFilter: false,
+    useVolumeFilter: false,
+    volMultiplier: 1.2,
+    useHtfBias: false,
+    htfEmaPeriod: 100,
+  };
+
+  intervalOptions = ['1m', '3m', '5m', '15m'];
+  limitOptions    = [1000, 5000, 10000, 20000, 50000];
+
+  stats: BacktestStats | null = null;
+  trades: TradeRow[] = [];
+  isLoading = false;
+  errorMessage = '';
+
+  private candleTimes: number[] = [];
+
+  ngOnInit(): void {
+    this.chart = createChart(this.chartContainer.nativeElement, {
+      layout:     { background: { color: '#0d0f17' }, textColor: '#9498b0' },
+      grid:       { vertLines: { color: '#1a1d2e' }, horzLines: { color: '#1a1d2e' } },
+      crosshair:  { mode: 1 },
+      rightPriceScale: { borderColor: '#1e2130' },
+      timeScale:  { borderColor: '#1e2130', timeVisible: true },
+      width:  this.chartContainer.nativeElement.clientWidth,
+      height: 420,
+    });
+    this.candleSeries = this.chart.addCandlestickSeries({
+      upColor: '#00d4a3', downColor: '#f04b5c',
+      borderUpColor: '#00d4a3', borderDownColor: '#f04b5c',
+      wickUpColor: '#00d4a3',   wickDownColor: '#f04b5c',
+    });
+    // Auto-resize
+    const ro = new ResizeObserver(() => {
+      this.chart.applyOptions({ width: this.chartContainer.nativeElement.clientWidth });
+    });
+    ro.observe(this.chartContainer.nativeElement);
+    // Run an initial backtest immediately
+    this.runBacktest();
+  }
+
+  ngOnDestroy(): void {
+    this.chart?.remove();
+  }
+
+  async runBacktest(): Promise<void> {
+    this.isLoading = true;
+    this.errorMessage = '';
+    this.stats = null;
+    this.trades = [];
+
+    try {
+      const body = {
+        pair:           this.params.pair,
+        interval:       this.params.interval,
+        limit:          this.params.limit,
+        minVotes:       this.params.minVotes,
+        minExitVotes:   this.params.minExitVotes,
+        rsiOversold:    this.params.rsiOversold,
+        rsiOverbought:  this.params.rsiOverbought,
+        emaFast:        this.params.emaFast,
+        emaSlow:        this.params.emaSlow,
+        initialCapital: this.params.initialCapital,
+        tradeAmount:    this.params.tradeAmount,
+        tradeSizePct:   this.params.tradeSizePct / 100,
+        useTrendFilter:  this.params.useTrendFilter,
+        useVolumeFilter: this.params.useVolumeFilter,
+        volMultiplier:   this.params.volMultiplier,
+        useHtfBias:      this.params.useHtfBias,
+        htfEmaPeriod:    this.params.htfEmaPeriod,
+      };
+
+      const resp = await fetch(`${this.API_URL}/backtest`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(body),
+      });
+
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+
+      // Render candles
+      const chartData: CandlestickData[] = (data.candles || []).map((c: any) => ({
+        time: Math.floor(c.time / 1000) as any,
+        open: c.open, high: c.high, low: c.low, close: c.close,
+      }));
+      this.candleSeries.setData(chartData);
+      this.chart.timeScale().fitContent();
+      this.candleTimes = chartData.map(c => c.time as number);
+
+      // Render markers (entry + exit)
+      this.renderMarkers(data.signals || [], chartData);
+
+      // Update stats & trades
+      this.stats  = data.stats  || null;
+      this.trades = (data.trades || []).slice(0, 500); // Show up to 500 rows
+
+    } catch (err: any) {
+      this.errorMessage = err?.message || 'Backtest failed';
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  private renderMarkers(signals: any[], chartData: CandlestickData[]): void {
+    if (!signals.length || !chartData.length) return;
+    const first = chartData[0].time as number;
+    const last  = chartData[chartData.length - 1].time as number;
+    const times = chartData.map(c => c.time as number);
+
+    const snapToCandle = (sec: number): number => {
+      const clamped = Math.min(Math.max(sec, first), last);
+      let lo = 0, hi = times.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (times[mid] < clamped) lo = mid + 1; else hi = mid;
+      }
+      if (lo > 0) {
+        return Math.abs(times[lo - 1] - clamped) <= Math.abs(times[lo] - clamped)
+          ? times[lo - 1] : times[lo];
+      }
+      return times[lo];
+    };
+
+    const markers: SeriesMarker<any>[] = [];
+    for (const s of signals) {
+      if (!s.timestamp) continue;
+      const entryMs = new Date(s.timestamp).getTime();
+      if (isNaN(entryMs)) continue;
+      const entryTime = snapToCandle(Math.floor(entryMs / 1000));
+      const isLong = s.direction === 'LONG';
+
+      markers.push({
+        time: entryTime as any,
+        position: (isLong ? 'belowBar' : 'aboveBar') as any,
+        color: isLong ? '#00d4a3' : '#f04b5c',
+        shape: (isLong ? 'arrowUp' : 'arrowDown') as any,
+        text: isLong ? '▲ BUY' : '▼ SELL',
+        size: 2,
+      });
+
+      if (s.exitTimestamp) {
+        const exitMs  = new Date(s.exitTimestamp).getTime();
+        const exitSec = Math.floor(exitMs / 1000);
+        if (!isNaN(exitMs) && exitSec >= first && exitSec <= last) {
+          const exitTime = snapToCandle(exitSec);
+          // Color exit by P&L direction: green = profit, red = loss
+          const isProfitable = isLong
+            ? (s.exitPrice > s.entry)
+            : (s.exitPrice < s.entry);
+          markers.push({
+            time: exitTime as any,
+            position: (isLong ? 'aboveBar' : 'belowBar') as any,
+            color: isProfitable ? '#00d4a3' : '#f04b5c',
+            shape: 'circle' as any,
+            text: isProfitable ? 'PROFIT' : 'LOSS',
+            size: 1,
+          });
+        }
+      }
+    }
+    markers.sort((a, b) => (a.time as number) - (b.time as number));
+    this.candleSeries.setMarkers(markers);
+  }
+
+  getPnlClass(val: number): string {
+    return val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral';
+  }
+}

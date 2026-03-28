@@ -1,12 +1,24 @@
 <div class="dashboard">
   <div class="status-bar">
-    <h1>🪙 Bitcoin Scanner Dashboard</h1>
+    <h1>🪙 Bitcoin Scanner</h1>
+    <!-- Tab Navigation -->
+    <div class="tab-nav">
+      <button class="tab-btn" [class.active]="activeTab === 'dashboard'"  (click)="activeTab = 'dashboard'">📊 Dashboard</button>
+      <button class="tab-btn" [class.active]="activeTab === 'backtester'" (click)="activeTab = 'backtester'">🔬 Backtester</button>
+    </div>
     <div class="connection-status">
       <span [class]="'status-dot ' + (wsService.connectionStatus$ | async)"></span>
       <span>{{ (wsService.connectionStatus$ | async) | uppercase }}</span>
     </div>
   </div>
 
+  <!-- Backtester Tab -->
+  <div class="backtester-tab" *ngIf="activeTab === 'backtester'">
+    <app-backtester></app-backtester>
+  </div>
+
+  <!-- Dashboard Tab -->
+  <ng-container *ngIf="activeTab === 'dashboard'">
   <div class="main-content">
     <div class="left-panel">
       <div class="panel price-panel">
@@ -232,7 +244,21 @@
   </div>
 
     <div class="panel chart-panel">
-      <h2>Real-time Price Chart (300 candles)</h2>
+      <div class="panel-header-row">
+        <h2>Real-time Price Chart ({{ selectedHistory }} candles)</h2>
+        <div class="history-selector">
+          <span class="selector-label">History:</span>
+          <button *ngFor="let opt of historyOptions"
+                  class="history-btn"
+                  [class.active]="selectedHistory === opt"
+                  (click)="updateHistory(opt)">
+            {{ opt >= 1000 ? (opt/1000) + 'k' : opt }}
+          </button>
+          <div class="loading-spinner-small" *ngIf="scannerData.historyLoading$ | async">
+            ⌛
+          </div>
+        </div>
+      </div>
       <app-candlestick-chart></app-candlestick-chart>
     </div>
 
@@ -254,4 +280,6 @@
       </div>
     </div>
   </div>
+
+  </ng-container>
 </div>

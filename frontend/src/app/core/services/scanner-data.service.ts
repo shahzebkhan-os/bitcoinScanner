@@ -23,6 +23,8 @@ export class ScannerDataService {
 
   public candles$ = new BehaviorSubject<Candle[]>([]);
   public latestIndicators$ = new BehaviorSubject<IndicatorSnapshot | null>(null);
+  public historyCandles$ = new BehaviorSubject<Candle[]>([]);
+  public historyLoading$ = new BehaviorSubject<boolean>(false);
   public strategyVotes$ = new BehaviorSubject<SignalResult[]>([]);
   public consensus$ = new BehaviorSubject<ConsensusResult | null>(null);
   public signalFeed$ = new BehaviorSubject<FiredSignal[]>([]);
@@ -139,25 +141,98 @@ export class ScannerDataService {
     }
   }
 
+  public async loadChartHistory(pair: string, interval: string, limit: number): Promise<void> {
+    this.historyLoading$.next(true);
+    try {
+      const response = await fetch(`${ScannerDataService.DEFAULT_API_URL}/candles/history?pair=${pair}&interval=${interval}&limit=${limit}`);
+      if (!response.ok) throw new Error('Failed to fetch history');
+      const data = await response.json();
+      if (data.candles) {
+        this.historyCandles$.next(data.candles);
+      }
+      if (data.signals) {
+        const historySignals = data.signals.map((s: any) => ({
+          feed: {
+            timestamp: s.timestamp,
+            direction: s.direction,
+            price: s.price,
+            votes: s.votes,
+            strategies: (s.strategies || '').split('; '),
+            strength: s.avgStrength || 0.75,
+            rsi: 50, // placeholder
+            volumeRatio: 1.0
+          } as FiredSignal,
+          overlay: {
+            interval: s.interval || 'history',
+            entry: s.entry,
+            stopLoss: s.stopLoss,
+            target: s.target,
+            targetRr: s.targetRr,
+            timestamp: s.entryTimestamp || s.timestamp,
+            direction: s.direction,
+            exitTimestamp: s.exitTimestamp || null,
+            exitPrice: s.exitPrice || null,
+            exitType: s.exitType || null,
+          } as TradeLevels
+        }));
+
+        this.signalOverlays$.next(historySignals.map((x: any) => x.overlay));
+        this.signalFeed$.next(historySignals.map((x: any) => x.feed));
+        
+        // Update stats
+        const total = historySignals.length;
+        const longs = historySignals.filter((x: any) => x.feed.direction === 'LONG').length;
+        const shorts = historySignals.filter((x: any) => x.feed.direction === 'SHORT').length;
+        this.sessionStats$.next({ total, longs, shorts, lastSignalTime: total > 0 ? historySignals[0].feed.timestamp : null });
+      }
+    } catch (error) {
+      console.error('Error loading chart history:', error);
+    } finally {
+      this.historyLoading$.next(false);
+    }
+  }
+
   private async loadSignalHistory(): Promise<void> {
     try {
-      const response = await fetch(`${ScannerDataService.DEFAULT_API_URL}/signals/history?limit=100`);
+      const response = await fetch(`${ScannerDataService.DEFAULT_API_URL}/signals/history?limit=1000`);
       if (!response.ok) return;
       const payload = await response.json();
       const signals = Array.isArray(payload?.signals) ? payload.signals : [];
-      const overlays: TradeLevels[] = signals
+      const signalsRefined = signals
         .filter((s: any) => s.entry && s.stopLoss && s.target)
         .map((s: any) => ({
-          interval: s.interval || '1m',
-          entry: Number(s.entry),
-          stopLoss: Number(s.stopLoss),
-          target: Number(s.target),
-          targetRr: Number(s.targetRr || this.riskRewardRatio$.value || 1.5),
-          timestamp: s.entryTimestamp || s.timestamp,
-          direction: s.entryDirection || s.direction,
+          feed: {
+            timestamp: s.timestamp,
+            direction: s.direction,
+            price: Number(s.price),
+            votes: s.votes,
+            strategies: (s.strategies || '').split(';'),
+            strength: Number(s.avgStrength || 0),
+            rsi: Number(s.rsi || 0),
+            volumeRatio: Number(s.volumeRatio || 0)
+          } as FiredSignal,
+          overlay: {
+            interval: s.interval || '1m',
+            entry: Number(s.entry),
+            stopLoss: Number(s.stopLoss),
+            target: Number(s.target),
+            targetRr: Number(s.targetRr || this.riskRewardRatio$.value || 1.5),
+            timestamp: s.entryTimestamp || s.timestamp,
+            direction: s.entryDirection || s.direction,
+          } as TradeLevels
         }))
-        .slice(0, 100);
-      this.signalOverlays$.next(overlays);
+        .slice(0, 1000);
+
+      this.signalOverlays$.next(signalsRefined.map((x: any) => x.overlay));
+      this.signalFeed$.next(signalsRefined.map((x: any) => x.feed));
+      
+      // Update session stats from loaded history
+      const total = signalsRefined.length;
+      const longs = signalsRefined.filter((s: any) => s.feed.direction === 'LONG').length;
+      const shorts = signalsRefined.filter((s: any) => s.feed.direction === 'SHORT').length;
+      const lastSignalTime = total > 0 ? signalsRefined[0].feed.timestamp : null;
+      
+      this.sessionStats$.next({ total, longs, shorts, lastSignalTime });
     } catch {
       // optional bootstrap history
     }

@@ -98,6 +98,9 @@ export interface TradeLevels {
   targetRr: number;
   timestamp?: string;
   direction?: string;
+  exitTimestamp?: string | null;
+  exitPrice?: number | null;
+  exitType?: string | null;  // 'target' | 'stoploss' | 'open'
 }
 
 export interface IntervalStatus {
