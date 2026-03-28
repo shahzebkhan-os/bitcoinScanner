@@ -131,7 +131,9 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
 
         # 2. Volume Confirmation: current volume >= vol_multiplier × 20-bar average
         vol_mean_20 = data['volume'].rolling(window=20).mean()
-        data['volume_ok'] = data['volume'] >= (vol_mean_20 * vol_multiplier)
+        # Prevent division by zero - use a small epsilon for comparison
+        vol_mean_20_safe = vol_mean_20.replace(0, np.nan).fillna(1e-8)
+        data['volume_ok'] = data['volume'] >= (vol_mean_20_safe * vol_multiplier)
 
         # 3. Higher Timeframe Bias: close vs long-period EMA (approximates 15m trend)
         data['htf_ema']       = data['close'].ewm(span=htf_ema_period, adjust=False).mean()

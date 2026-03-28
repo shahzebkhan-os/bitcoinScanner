@@ -215,6 +215,8 @@ def setup_routes(app: FastAPI, config: dict, start_time: datetime, runtime_state
             short_total  = 0
 
             trade_rows = []
+            equity_curve = [{"timestamp": signals[0]["timestamp"] if signals else "", "capital": initial_capital}]
+
             for s in signals:
                 entry  = s["entry"]
                 exit_p = s.get("exitPrice")
@@ -236,6 +238,14 @@ def setup_routes(app: FastAPI, config: dict, start_time: datetime, runtime_state
                     pnl     = trade_capital * pct_chg
                     capital += pnl
                     total_pnl += pnl
+
+                    # Track equity curve on each trade close
+                    if s.get("exitTimestamp"):
+                        equity_curve.append({
+                            "timestamp": s["exitTimestamp"],
+                            "capital": round(capital, 2)
+                        })
+
                     if pnl > 0:
                         total_profit += pnl
                         wins_count += 1
@@ -284,6 +294,7 @@ def setup_routes(app: FastAPI, config: dict, start_time: datetime, runtime_state
                 "maxDrawdown":   round(max_drawdown, 2),
                 "finalCapital":  round(capital, 2),
                 "initialCapital": initial_capital,
+                "equityCurve":   equity_curve,  # New: equity curve for visualization
             }
 
             return {"candles": candles_list, "signals": signals, "stats": stats, "trades": trade_rows}

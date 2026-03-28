@@ -209,10 +209,25 @@
       <div #btChartContainer class="bt-chart"></div>
     </div>
 
+    <!-- Equity Curve Section -->
+    <div class="equity-section" *ngIf="stats?.equityCurve && stats.equityCurve.length > 0">
+      <div class="equity-header">
+        <h3>📈 Equity Curve</h3>
+        <span class="equity-stats">
+          Start: ${{ stats.initialCapital | number:'1.0-0' }} → End: ${{ stats.finalCapital | number:'1.0-0' }}
+          ({{ ((stats.finalCapital - stats.initialCapital) / stats.initialCapital * 100) | number:'1.1-1' }}%)
+        </span>
+      </div>
+      <div #equityChartContainer class="equity-chart"></div>
+    </div>
+
     <!-- Trades Section (Takes remaining space, scrolls internally) -->
     <div class="trades-section" *ngIf="trades.length > 0">
       <div class="trades-header">
         <h3>Trade Log <span class="badge">{{ trades.length }}</span></h3>
+        <button class="export-btn" (click)="exportToCSV()" title="Export to CSV">
+          📥 Export CSV
+        </button>
       </div>
       <div class="table-wrapper">
         <table>
@@ -246,8 +261,18 @@
 
     <!-- Loading state -->
     <div class="loading-overlay" *ngIf="isLoading">
-      <div class="spinner">⌛</div>
-      <span>Running backtest...</span>
+      <div class="spinner-large">⌛</div>
+      <div class="loading-text">
+        <span class="loading-title">Running backtest...</span>
+        <span class="loading-subtitle">Analyzing {{ params.limit }} candles with {{ params.interval }} timeframe</span>
+      </div>
+    </div>
+
+    <!-- Empty state when no results yet -->
+    <div class="empty-state" *ngIf="!isLoading && !stats">
+      <div class="empty-icon">📊</div>
+      <h3>No backtest results yet</h3>
+      <p>Configure your strategy parameters in the sidebar and click "Run Backtest" to begin.</p>
     </div>
 
   </main>
