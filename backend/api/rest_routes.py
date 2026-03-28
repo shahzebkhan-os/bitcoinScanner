@@ -10,15 +10,29 @@ Responsibilities:
 import logging
 import csv
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import yaml
 
 logger = logging.getLogger(__name__)
+DEFAULT_STOP_LOSS_PCT = 0.002
 
 
-def setup_routes(app: FastAPI, config: dict, start_time: datetime):
+def _snake_to_camel(key: str) -> str:
+    parts = key.split("_")
+    return parts[0] + "".join(p[:1].upper() + p[1:] for p in parts[1:])
+
+
+def _camelize(data):
+    if isinstance(data, list):
+        return [_camelize(item) for item in data]
+    if isinstance(data, dict):
+        return {_snake_to_camel(str(k)): _camelize(v) for k, v in data.items()}
+    return data
+
+
+def setup_routes(app: FastAPI, config: dict, start_time: datetime, runtime_state: dict | None = None):
     """
     Set up REST API routes.
 
@@ -45,8 +59,14 @@ def setup_routes(app: FastAPI, config: dict, start_time: datetime):
             sanitized = dict(config)
             if 'telegram' in sanitized:
                 sanitized['telegram']['bot_token'] = "***REDACTED***"
-
-            return sanitized
+            if 'risk' in sanitized:
+                sanitized['risk'] = {
+                    "maxLeverage": sanitized['risk'].get("max_leverage"),
+                    "riskPerTradePct": sanitized['risk'].get("risk_per_trade_pct"),
+                    "targetRr": sanitized['risk'].get("target_rr"),
+                    "defaultStopLossPct": sanitized['risk'].get("default_stop_loss_pct", DEFAULT_STOP_LOSS_PCT),
+                }
+            return _camelize(sanitized)
         except Exception as e:
             logger.error(f"Error getting config: {e}")
             return {"error": str(e)}
@@ -69,7 +89,11 @@ def setup_routes(app: FastAPI, config: dict, start_time: datetime):
             # Reverse to show newest first
             signals.reverse()
 
-            return {"signals": signals}
+            camel_signals = []
+            for row in signals:
+                converted = {_snake_to_camel(k): v for k, v in row.items()}
+                camel_signals.append(converted)
+            return {"signals": camel_signals}
 
         except Exception as e:
             logger.error(f"Error reading signals history: {e}")
@@ -82,12 +106,16 @@ def setup_routes(app: FastAPI, config: dict, start_time: datetime):
             from api.websocket_server import manager
             from scanner.fetcher import CandleBuffer
 
-            uptime = (datetime.now() - start_time).total_seconds()
+            now = datetime.now(timezone.utc) if start_time.tzinfo else datetime.now()
+            uptime = (now - start_time).total_seconds()
 
             return {
                 "status": "running",
-                "uptime_seconds": int(uptime),
-                "connected_clients": manager.get_connection_count()
+                "uptimeSeconds": int(uptime),
+                "connectedClients": manager.get_connection_count(),
+                "candlesBuffered": (runtime_state or {}).get("candlesBuffered", {}),
+                "lastFetchLatencyMs": (runtime_state or {}).get("lastFetchLatencyMs"),
+                "intervalStatus": (runtime_state or {}).get("intervalStatus", {}),
             }
 
         except Exception as e:

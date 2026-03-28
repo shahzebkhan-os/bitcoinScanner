@@ -19,12 +19,18 @@
               {{ priceChangePercent | number:'1.2-2' }}%
             </span>
           </div>
-          <div class="trend-summary" [class]="getOverallTrendClass(scannerData.latestIndicators$ | async)">
+          <div class="trend-summary" [class]="getOverallTrendClass(scannerData.overallTrend$ | async)">
             <span class="trend-label">Overall Trend:</span>
-            <span class="trend-value">{{ getOverallTrend(scannerData.latestIndicators$ | async) }}</span>
-            <span class="direction-indicator" [class]="getOverallTrendClass(scannerData.latestIndicators$ | async)">
-              {{ getOverallTrend(scannerData.latestIndicators$ | async) === 'BULLISH' ? '🚀' : getOverallTrend(scannerData.latestIndicators$ | async) === 'BEARISH' ? '🔥' : '⚖️' }}
+            <span class="trend-value">{{ getOverallTrend(scannerData.overallTrend$ | async) }}</span>
+            <span class="direction-indicator" [class]="getOverallTrendClass(scannerData.overallTrend$ | async)">
+              {{ getOverallTrend(scannerData.overallTrend$ | async) === 'BULLISH' ? '🚀' : getOverallTrend(scannerData.overallTrend$ | async) === 'BEARISH' ? '🔥' : '⚖️' }}
             </span>
+            <span class="trend-horizon">for next 1 min</span>
+          </div>
+          <div class="trend-intervals" *ngIf="scannerData.overallTrend$ | async as overallTrend">
+            <span class="interval-chip">1m: {{ getIntervalConsensus(overallTrend, '1m') }}</span>
+            <span class="interval-chip">2m: {{ getIntervalConsensus(overallTrend, '2m') }}</span>
+            <span class="interval-chip">3m: {{ getIntervalConsensus(overallTrend, '3m') }}</span>
           </div>
           <div class="indicator-row">
             <span [class.bullish]="getRsiZoneClass(scannerData.latestIndicators$ | async) === 'bullish'"
@@ -164,6 +170,33 @@
         </div>
 
         <div class="strategies-list">
+          <div class="interval-tabs" *ngIf="scannerData.overallTrend$ | async">
+            <button
+              type="button"
+              class="interval-tab"
+              [class.active]="selectedStrategyInterval === '1m'"
+              (click)="selectStrategyInterval('1m')"
+            >
+              1m
+            </button>
+            <button
+              type="button"
+              class="interval-tab"
+              [class.active]="selectedStrategyInterval === '2m'"
+              (click)="selectStrategyInterval('2m')"
+            >
+              2m
+            </button>
+            <button
+              type="button"
+              class="interval-tab"
+              [class.active]="selectedStrategyInterval === '3m'"
+              (click)="selectStrategyInterval('3m')"
+            >
+              3m
+            </button>
+          </div>
+
           <div *ngFor="let strategy of (scannerData.strategyVotes$ | async)"
                class="strategy-card">
             <div class="strategy-header">
@@ -178,12 +211,28 @@
             </div>
           </div>
         </div>
+
+        <div class="panel interval-strategies-panel">
+          <h2>Interval Strategy Votes ({{ selectedStrategyInterval }})</h2>
+          <div class="strategies-list small">
+            <div *ngFor="let strategy of getIntervalStrategyVotes(selectedStrategyInterval)" class="strategy-card">
+              <div class="strategy-header">
+                <span class="strategy-name">{{ strategy.strategyName }}</span>
+                <span [class]="'direction-badge ' + strategy.direction.toLowerCase()">{{ strategy.direction }}</span>
+              </div>
+              <div class="strategy-reason">{{ strategy.reason }}</div>
+            </div>
+            <div *ngIf="getIntervalStrategyVotes(selectedStrategyInterval).length === 0" class="empty-state">
+              Waiting for {{ selectedStrategyInterval }} interval strategy votes...
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
     <div class="panel chart-panel">
-      <h2>Real-time Price Chart</h2>
+      <h2>Real-time Price Chart (300 candles)</h2>
       <app-candlestick-chart></app-candlestick-chart>
     </div>
 
@@ -206,4 +255,3 @@
     </div>
   </div>
 </div>
-

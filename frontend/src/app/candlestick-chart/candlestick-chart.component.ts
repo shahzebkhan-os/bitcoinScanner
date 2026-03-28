@@ -1,7 +1,7 @@
-import { Component, ElementRef, Input, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { createChart, IChartApi, ISeriesApi, CandlestickData, SeriesMarker } from 'lightweight-charts';
-import { Candle, ConsensusResult } from '../core/models/scanner.models';
+import { createChart, IChartApi, ISeriesApi, CandlestickData, SeriesMarker, LineStyle } from 'lightweight-charts';
+import { Candle, ConsensusResult, TradeLevels } from '../core/models/scanner.models';
 import { ScannerDataService } from '../core/services/scanner-data.service';
 import { Subscription } from 'rxjs';
 
@@ -20,12 +20,20 @@ import { Subscription } from 'rxjs';
   `]
 })
 export class CandlestickChartComponent implements OnInit, OnDestroy {
+  private static readonly MAX_MARKERS = 50;
+  private static readonly HORIZONTAL_WINDOW_CANDLES = 120;
+  private static readonly DEFAULT_STOP_LOSS_PCT = 0.002;
+
   @ViewChild('chartContainer', { static: true }) chartContainer!: ElementRef;
 
   private chart!: IChartApi;
   private candlestickSeries!: ISeriesApi<'Candlestick'>;
+  private entryLineSeries!: ISeriesApi<'Line'>;
+  private stopLineSeries!: ISeriesApi<'Line'>;
+  private targetLineSeries!: ISeriesApi<'Line'>;
   private subscriptions: Subscription[] = [];
   private resizeObserver!: ResizeObserver;
+  private markers: SeriesMarker<any>[] = [];
 
   constructor(private scannerData: ScannerDataService) {}
 
@@ -69,6 +77,17 @@ export class CandlestickChartComponent implements OnInit, OnDestroy {
         if (consensus && consensus.fired) {
           this.addMarker(consensus);
         }
+      })
+    );
+
+    this.subscriptions.push(
+      this.scannerData.signalOverlays$.subscribe(overlays => {
+        if (!overlays || overlays.length === 0) return;
+        if (!this.scannerData.historyReplayConsumed$.value) {
+          this.replayHistoryMarkers(overlays);
+          this.scannerData.historyReplayConsumed$.next(true);
+        }
+        this.renderOverlay(overlays[0]);
       })
     );
   }
@@ -128,6 +147,27 @@ export class CandlestickChartComponent implements OnInit, OnDestroy {
       wickDownColor: '#f04b5c',
     });
 
+    this.entryLineSeries = this.chart.addLineSeries({
+      color: '#f7931a',
+      lineWidth: 1,
+      lineStyle: LineStyle.Dashed,
+      title: 'Entry',
+    });
+
+    this.stopLineSeries = this.chart.addLineSeries({
+      color: '#f04b5c',
+      lineWidth: 1,
+      lineStyle: LineStyle.Dashed,
+      title: 'Stop',
+    });
+
+    this.targetLineSeries = this.chart.addLineSeries({
+      color: '#00d4a3',
+      lineWidth: 1,
+      lineStyle: LineStyle.Dashed,
+      title: 'Target',
+    });
+
     // Use ResizeObserver for more robust resizing
     this.resizeObserver = new ResizeObserver(entries => {
       if (entries.length === 0 || !entries[0].contentRect) return;
@@ -145,25 +185,88 @@ export class CandlestickChartComponent implements OnInit, OnDestroy {
   }
 
   private addMarker(consensus: ConsensusResult): void {
-    const markers: SeriesMarker<any>[] = [];
     const color = consensus.direction === 'LONG' ? '#00d4a3' : '#f04b5c';
     const shape = consensus.direction === 'LONG' ? 'arrowUp' : 'arrowDown';
-    const text = `${consensus.direction} (${consensus.avgStrength.toFixed(2)})`;
-
-    // Only add marker for the latest point if we have data
     const candles = this.scannerData.candles$.value;
-    if (candles.length > 0) {
-      const latestTime = candles[candles.length - 1].time / 1000;
-      
-      markers.push({
-        time: latestTime as any,
-        position: consensus.direction === 'LONG' ? 'belowBar' : 'aboveBar',
-        color: color,
-        shape: shape,
-        text: text,
-      });
+    if (candles.length === 0) {
+      return;
+    }
 
-      this.candlestickSeries.setMarkers(markers);
+    const latest = candles[candles.length - 1];
+    const latestTime = latest.time / 1000;
+    const entry = latest.close;
+    const candleStop = consensus.direction === 'LONG' ? latest.low : latest.high;
+    const stopPct = this.scannerData.defaultStopLossPct$.value || CandlestickChartComponent.DEFAULT_STOP_LOSS_PCT;
+    const pctStop = consensus.direction === 'LONG'
+      ? entry * (1 - stopPct)
+      : entry * (1 + stopPct);
+    const stopLoss = consensus.direction === 'LONG'
+      ? Math.min(candleStop, pctStop)
+      : Math.max(candleStop, pctStop);
+    const risk = Math.max(0.0001, Math.abs(entry - stopLoss));
+    const targetRr = this.scannerData.riskRewardRatio$.value || 1.5;
+    const target = consensus.direction === 'LONG' ? entry + (risk * targetRr) : entry - (risk * targetRr);
+
+    const text = `${consensus.direction} E:${entry.toFixed(2)} SL:${stopLoss.toFixed(2)} TP:${target.toFixed(2)}`;
+    this.markers.push({
+      time: latestTime as any,
+      position: consensus.direction === 'LONG' ? 'belowBar' : 'aboveBar',
+      color,
+      shape,
+      text,
+    });
+    this.markers = this.markers.slice(-CandlestickChartComponent.MAX_MARKERS);
+    this.candlestickSeries.setMarkers(this.markers);
+
+    this.renderOverlay({ interval: '1m', entry, stopLoss, target, targetRr: targetRr });
+  }
+
+  private renderOverlay(overlay: TradeLevels): void {
+    const candles = this.scannerData.candles$.value;
+    if (candles.length === 0) return;
+    const horizontalWindow = candles
+      .slice(-CandlestickChartComponent.HORIZONTAL_WINDOW_CANDLES)
+      .map((c) => ({ time: Math.floor(c.time / 1000) as any }));
+    this.entryLineSeries.setData(horizontalWindow.map((p) => ({ ...p, value: overlay.entry })));
+    this.stopLineSeries.setData(horizontalWindow.map((p) => ({ ...p, value: overlay.stopLoss })));
+    this.targetLineSeries.setData(horizontalWindow.map((p) => ({ ...p, value: overlay.target })));
+  }
+
+  private replayHistoryMarkers(overlays: TradeLevels[]): void {
+    if (overlays.length === 0) return;
+    const candles = this.scannerData.candles$.value;
+    if (candles.length === 0) return;
+
+    const firstCandleTime = candles[0].time / 1000;
+    const lastCandleTime = candles[candles.length - 1].time / 1000;
+
+    const rawHistoryMarkers = overlays
+      .filter((overlay) => !!overlay.timestamp)
+      .map((overlay) => {
+        const ts = typeof overlay.timestamp === 'string' ? overlay.timestamp : '';
+        const parsedTime = new Date(ts).getTime();
+        if (Number.isNaN(parsedTime)) {
+          return null;
+        }
+        const markerTime = Math.floor(parsedTime / 1000);
+        const clampedTime = Math.min(Math.max(markerTime, firstCandleTime), lastCandleTime);
+        const isLong = (overlay.direction || 'LONG') === 'LONG';
+        return {
+          time: clampedTime as any,
+          position: (isLong ? 'belowBar' : 'aboveBar') as 'belowBar' | 'aboveBar',
+          color: isLong ? '#00d4a3' : '#f04b5c',
+          shape: (isLong ? 'arrowUp' : 'arrowDown') as 'arrowUp' | 'arrowDown',
+          text: `${isLong ? 'LONG' : 'SHORT'} E:${overlay.entry.toFixed(2)} SL:${overlay.stopLoss.toFixed(2)} TP:${overlay.target.toFixed(2)}`,
+        };
+      })
+      .filter((marker) => marker !== null)
+      .slice(0, CandlestickChartComponent.MAX_MARKERS);
+
+    const historyMarkers = rawHistoryMarkers as SeriesMarker<any>[];
+
+    if (historyMarkers.length > 0) {
+      this.markers = historyMarkers;
+      this.candlestickSeries.setMarkers(this.markers);
     }
   }
 }

@@ -22,11 +22,13 @@ CSV_FILE = "signals_log.csv"
 CSV_HEADERS = [
     'timestamp', 'direction', 'price', 'votes', 'strategies',
     'avg_strength', 'rsi', 'macd_histogram', 'volume_ratio',
-    'ema_fast', 'ema_slow', 'bb_upper', 'bb_lower', 'vwap'
+    'ema_fast', 'ema_slow', 'bb_upper', 'bb_lower', 'vwap',
+    'interval', 'entry', 'stop_loss', 'target', 'target_rr',
+    'entry_timestamp', 'entry_direction'
 ]
 
 
-def log_signal(consensus: ConsensusResult, snapshot: IndicatorSnapshot):
+def log_signal(consensus: ConsensusResult, snapshot: IndicatorSnapshot, trade_levels: dict | None = None):
     """
     Log signal to CSV file.
 
@@ -35,6 +37,7 @@ def log_signal(consensus: ConsensusResult, snapshot: IndicatorSnapshot):
         snapshot: Indicator snapshot
     """
     try:
+        levels = trade_levels or {}
         # Check if file exists
         file_exists = os.path.isfile(CSV_FILE)
 
@@ -60,7 +63,14 @@ def log_signal(consensus: ConsensusResult, snapshot: IndicatorSnapshot):
                 'ema_slow': f"{snapshot.ema_slow:.2f}",
                 'bb_upper': f"{snapshot.bb_upper:.2f}",
                 'bb_lower': f"{snapshot.bb_lower:.2f}",
-                'vwap': f"{snapshot.vwap:.2f}"
+                'vwap': f"{snapshot.vwap:.2f}",
+                'interval': levels.get('interval', ''),
+                'entry': f"{levels.get('entry', snapshot.current_price):.2f}" if levels.get('entry', snapshot.current_price) is not None else "",
+                'stop_loss': f"{levels.get('stopLoss', None):.2f}" if levels.get('stopLoss', None) is not None else "",
+                'target': f"{levels.get('target', None):.2f}" if levels.get('target', None) is not None else "",
+                'target_rr': f"{levels.get('targetRr', None):.2f}" if levels.get('targetRr', None) is not None else "",
+                'entry_timestamp': levels.get('timestamp', snapshot.timestamp.isoformat()),
+                'entry_direction': levels.get('direction', consensus.direction),
             })
 
         logger.info(f"Signal logged to {CSV_FILE}")
