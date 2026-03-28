@@ -16,6 +16,7 @@ import { Subject, takeUntil } from 'rxjs';
 })
 export class AppComponent implements OnInit, OnDestroy {
   title = 'Bitcoin Scanner Dashboard';
+  selectedStrategyInterval: string = '1m';
 
   // Price tracking for change calculation
   private previousPrice: number = 0;
@@ -147,6 +148,14 @@ export class AppComponent implements OnInit, OnDestroy {
 
   getIntervalConsensus(overallTrend: OverallTrend | null, interval: string): string {
     return overallTrend?.intervals?.[interval]?.consensus || 'N/A';
+  }
+
+  getIntervalStrategyVotes(interval: string) {
+    return this.scannerData.strategiesByInterval$.value?.[interval] || [];
+  }
+
+  selectStrategyInterval(interval: string): void {
+    this.selectedStrategyInterval = interval;
   }
 
   // Phase 3: Consensus strength indicator

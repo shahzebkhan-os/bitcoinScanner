@@ -170,6 +170,33 @@
         </div>
 
         <div class="strategies-list">
+          <div class="interval-tabs" *ngIf="scannerData.overallTrend$ | async">
+            <button
+              type="button"
+              class="interval-tab"
+              [class.active]="selectedStrategyInterval === '1m'"
+              (click)="selectStrategyInterval('1m')"
+            >
+              1m
+            </button>
+            <button
+              type="button"
+              class="interval-tab"
+              [class.active]="selectedStrategyInterval === '2m'"
+              (click)="selectStrategyInterval('2m')"
+            >
+              2m
+            </button>
+            <button
+              type="button"
+              class="interval-tab"
+              [class.active]="selectedStrategyInterval === '3m'"
+              (click)="selectStrategyInterval('3m')"
+            >
+              3m
+            </button>
+          </div>
+
           <div *ngFor="let strategy of (scannerData.strategyVotes$ | async)"
                class="strategy-card">
             <div class="strategy-header">
@@ -181,6 +208,22 @@
             <div class="strategy-reason">{{ strategy.reason }}</div>
             <div class="strength-bar">
               <div class="strength-fill" [style.width.%]="strategy.strength * 100"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel interval-strategies-panel">
+          <h2>Interval Strategy Votes ({{ selectedStrategyInterval }})</h2>
+          <div class="strategies-list small">
+            <div *ngFor="let strategy of getIntervalStrategyVotes(selectedStrategyInterval)" class="strategy-card">
+              <div class="strategy-header">
+                <span class="strategy-name">{{ strategy.strategyName }}</span>
+                <span [class]="'direction-badge ' + strategy.direction.toLowerCase()">{{ strategy.direction }}</span>
+              </div>
+              <div class="strategy-reason">{{ strategy.reason }}</div>
+            </div>
+            <div *ngIf="getIntervalStrategyVotes(selectedStrategyInterval).length === 0" class="empty-state">
+              Waiting for {{ selectedStrategyInterval }} interval strategy votes...
             </div>
           </div>
         </div>

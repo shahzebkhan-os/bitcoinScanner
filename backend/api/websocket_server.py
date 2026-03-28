@@ -76,6 +76,8 @@ async def broadcast_tick(
     results: list[SignalResult],
     consensus: ConsensusResult,
     overall_trend: dict | None = None,
+    strategies_by_interval: dict | None = None,
+    consensus_by_interval: dict | None = None,
 ):
     """
     Broadcast tick data to all connected clients.
@@ -105,6 +107,8 @@ async def broadcast_tick(
             "consensus": consensus.to_dict(),
             "signalFired": consensus.fired,
             "overallTrend": overall_trend or {},
+            "strategiesByInterval": strategies_by_interval or {},
+            "consensusByInterval": consensus_by_interval or {},
         }
 
         await manager.broadcast(payload)
@@ -113,7 +117,7 @@ async def broadcast_tick(
         logger.error(f"Error broadcasting tick: {e}")
 
 
-async def broadcast_signal(consensus: ConsensusResult, snapshot: IndicatorSnapshot):
+async def broadcast_signal(consensus: ConsensusResult, snapshot: IndicatorSnapshot, trade_levels: dict | None = None):
     """
     Broadcast signal message when consensus fires.
 
@@ -131,7 +135,8 @@ async def broadcast_signal(consensus: ConsensusResult, snapshot: IndicatorSnapsh
             "strategies": consensus.agreeing_strategies,
             "strength": consensus.avg_strength,
             "rsi": snapshot.rsi,
-            "volumeRatio": snapshot.volume_ratio
+            "volumeRatio": snapshot.volume_ratio,
+            "tradeLevels": trade_levels or {},
         }
 
         await manager.broadcast(payload)

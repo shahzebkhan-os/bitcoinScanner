@@ -47,6 +47,14 @@ export interface ConsensusResult {
   fired: boolean;
 }
 
+export interface IntervalStrategies {
+  [interval: string]: SignalResult[];
+}
+
+export interface IntervalConsensusMap {
+  [interval: string]: ConsensusResult;
+}
+
 export interface FiredSignal {
   timestamp: string;
   direction: string;
@@ -80,4 +88,31 @@ export interface OverallTrend {
   totalShortVotes: number;
   totalNeutralVotes: number;
   intervals: Record<string, IntervalTrendBreakdown>;
+}
+
+export interface TradeLevels {
+  interval: string;
+  entry: number;
+  stopLoss: number;
+  target: number;
+  targetRr: number;
+  timestamp?: string;
+  direction?: string;
+}
+
+export interface IntervalStatus {
+  ok: boolean;
+  lastFetchAt: string;
+  lastFetchLatencyMs: number;
+  candlesBuffered: number;
+  message: string;
+}
+
+export interface HealthStatus {
+  status: string;
+  uptimeSeconds: number;
+  connectedClients: number;
+  candlesBuffered: Record<string, number>;
+  lastFetchLatencyMs: number | null;
+  intervalStatus: Record<string, IntervalStatus>;
 }

@@ -44,9 +44,14 @@ app = FastAPI(title="Bitcoin Scanner API")
 
 # Start time for uptime tracking
 start_time = datetime.now()
+runtime_state: dict[str, Any] = {
+    "candlesBuffered": {},
+    "lastFetchLatencyMs": None,
+    "intervalStatus": {},
+}
 
 # Set up REST routes
-setup_routes(app, config, start_time)
+setup_routes(app, config, start_time, runtime_state)
 
 
 @app.websocket("/ws")
@@ -142,28 +147,54 @@ async def scanner_loop():
 
             interval_results = {}
             interval_consensus = {}
+            interval_status: dict[str, dict[str, Any]] = {}
+            interval_fetch_latencies = []
             chart_snapshot = None
             chart_results = []
             chart_consensus = None
 
             for interval in scan_intervals:
+                fetch_started = time.monotonic()
                 candles = await fetch_candles(
                     pair=config['pair'],
                     interval=interval,
                     limit=config['candle_buffer_size']
                 )
+                fetch_latency_ms = round((time.monotonic() - fetch_started) * 1000, 2)
+                interval_fetch_latencies.append(fetch_latency_ms)
                 if candles is None or candles.empty:
+                    interval_status[interval] = {
+                        "ok": False,
+                        "lastFetchAt": datetime.utcnow().isoformat(),
+                        "lastFetchLatencyMs": fetch_latency_ms,
+                        "candlesBuffered": len(buffers[interval]),
+                        "message": "No candle data",
+                    }
                     continue
 
                 buffer = buffers[interval]
                 buffer.update(candles)
 
                 if len(buffer) < 50:
+                    interval_status[interval] = {
+                        "ok": True,
+                        "lastFetchAt": datetime.utcnow().isoformat(),
+                        "lastFetchLatencyMs": fetch_latency_ms,
+                        "candlesBuffered": len(buffer),
+                        "message": "Warming up",
+                    }
                     continue
 
                 df = buffer.get()
                 snapshot = calculate_indicators(df, config)
                 if snapshot is None:
+                    interval_status[interval] = {
+                        "ok": False,
+                        "lastFetchAt": datetime.utcnow().isoformat(),
+                        "lastFetchLatencyMs": fetch_latency_ms,
+                        "candlesBuffered": len(buffer),
+                        "message": "Indicator calculation failed",
+                    }
                     continue
 
                 results = run_all_strategies(snapshot, config, df)
@@ -180,7 +211,20 @@ async def scanner_loop():
                     chart_results = results
                     chart_consensus = consensus
 
+                interval_status[interval] = {
+                    "ok": True,
+                    "lastFetchAt": datetime.utcnow().isoformat(),
+                    "lastFetchLatencyMs": fetch_latency_ms,
+                    "candlesBuffered": len(buffer),
+                    "message": "Active",
+                }
+
             if not interval_results:
+                runtime_state["candlesBuffered"] = {interval: len(buf) for interval, buf in buffers.items()}
+                runtime_state["lastFetchLatencyMs"] = round(
+                    sum(interval_fetch_latencies) / len(interval_fetch_latencies), 2
+                ) if interval_fetch_latencies else None
+                runtime_state["intervalStatus"] = interval_status
                 continue
 
             # Update latest candle in configured chart interval with real-time ticker
@@ -191,13 +235,36 @@ async def scanner_loop():
 
             # Fallback chart interval if configured one unavailable
             if chart_snapshot is None or chart_consensus is None:
-                fallback_interval = next(i for i in scan_intervals if i in interval_results)
+                fallback_interval = next((i for i in scan_intervals if i in interval_results), None)
+                if fallback_interval is None:
+                    runtime_state["candlesBuffered"] = {interval: len(buf) for interval, buf in buffers.items()}
+                    runtime_state["lastFetchLatencyMs"] = round(
+                        sum(interval_fetch_latencies) / len(interval_fetch_latencies), 2
+                    ) if interval_fetch_latencies else None
+                    runtime_state["intervalStatus"] = interval_status
+                    continue
                 chart_interval = fallback_interval
                 chart_snapshot = interval_results[fallback_interval]["snapshot"]
                 chart_results = interval_results[fallback_interval]["strategies"]
                 chart_consensus = interval_consensus[fallback_interval]
 
             overall_trend = _build_overall_trend(interval_results, interval_consensus)
+            strategies_by_interval = {
+                interval: [
+                    {
+                        "strategyName": strategy.strategy_name,
+                        "direction": strategy.direction,
+                        "strength": strategy.strength,
+                        "reason": strategy.reason,
+                    }
+                    for strategy in data["strategies"]
+                ]
+                for interval, data in interval_results.items()
+            }
+            consensus_by_interval = {
+                interval: consensus.to_dict()
+                for interval, consensus in interval_consensus.items()
+            }
 
             # Use aggregated majority vote for actionable signal
             total_long = overall_trend["totalLongVotes"]
@@ -231,6 +298,8 @@ async def scanner_loop():
                 results=chart_results,
                 consensus=chart_consensus,
                 overall_trend=overall_trend,
+                strategies_by_interval=strategies_by_interval,
+                consensus_by_interval=consensus_by_interval,
             )
 
             # Check if consensus fired
@@ -239,12 +308,42 @@ async def scanner_loop():
                 last_time = last_signal_time.get(chart_consensus.direction, 0)
 
                 if current_time - last_time >= COOLDOWN_SECONDS:
+                    risk_cfg = config.get("risk", {})
+                    target_rr = float(risk_cfg.get("target_rr", 1.5))
+                    default_stop_loss_pct = float(risk_cfg.get("default_stop_loss_pct", 0.002))
+                    latest_candles = buffers[chart_interval].get()
+                    latest_candle = latest_candles.iloc[-1] if not latest_candles.empty else None
+                    entry = float(chart_snapshot.current_price)
+                    if latest_candle is not None:
+                        candle_stop = float(latest_candle["low"]) if chart_consensus.direction == "LONG" else float(latest_candle["high"])
+                    else:
+                        candle_stop = entry
+                    pct_stop = entry * (1 - default_stop_loss_pct) if chart_consensus.direction == "LONG" else entry * (1 + default_stop_loss_pct)
+                    stop_loss = min(candle_stop, pct_stop) if chart_consensus.direction == "LONG" else max(candle_stop, pct_stop)
+                    risk = max(0.0001, abs(entry - stop_loss))
+                    target = entry + (risk * target_rr) if chart_consensus.direction == "LONG" else entry - (risk * target_rr)
+                    trade_levels = {
+                        "interval": chart_interval,
+                        "entry": entry,
+                        "stopLoss": stop_loss,
+                        "target": target,
+                        "targetRr": target_rr,
+                        "timestamp": chart_snapshot.timestamp.isoformat(),
+                        "direction": chart_consensus.direction,
+                    }
+
                     dispatch_alerts(chart_consensus, chart_snapshot, config)
-                    log_signal(chart_consensus, chart_snapshot)
-                    await broadcast_signal(chart_consensus, chart_snapshot)
+                    log_signal(chart_consensus, chart_snapshot, trade_levels)
+                    await broadcast_signal(chart_consensus, chart_snapshot, trade_levels)
                     last_signal_time[chart_consensus.direction] = current_time
                 else:
                     logger.info(f"Signal suppressed - cooldown active for {chart_consensus.direction}")
+
+            runtime_state["candlesBuffered"] = {interval: len(buf) for interval, buf in buffers.items()}
+            runtime_state["lastFetchLatencyMs"] = round(
+                sum(interval_fetch_latencies) / len(interval_fetch_latencies), 2
+            ) if interval_fetch_latencies else None
+            runtime_state["intervalStatus"] = interval_status
 
         except Exception as e:
             logger.error(f"Error in scanner loop: {e}", exc_info=True)

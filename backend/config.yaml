@@ -38,3 +38,4 @@ risk:
   max_leverage: 5
   risk_per_trade_pct: 1.0
   target_rr: 1.5
+  default_stop_loss_pct: 0.002
