@@ -247,6 +247,80 @@
   &.negative { border-color: #f04b5c22; .stat-value { color: #f04b5c; } }
 }
 
+/* Advanced Metrics Section */
+.metrics-section {
+  background: #13151c;
+  border: 1px solid #1e2130;
+  border-radius: 8px;
+  padding: 14px;
+  flex-shrink: 0;
+}
+
+.metrics-header {
+  margin-bottom: 12px;
+
+  h3 {
+    font-size: 14px;
+    color: #e0e3f0;
+    font-family: 'JetBrains Mono', monospace;
+    margin: 0;
+    font-weight: 600;
+  }
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.metric-card {
+  background: #0d0f17;
+  border: 1px solid #1e2130;
+  border-radius: 6px;
+  padding: 10px 12px;
+  text-align: center;
+
+  .metric-label {
+    font-size: 10px;
+    color: #7b7f96;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .metric-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: #e0e3f0;
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 4px;
+
+    &.positive { color: #00d4a3; }
+    &.negative { color: #f04b5c; }
+  }
+
+  .metric-desc {
+    font-size: 9px;
+    color: #5a5e78;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  &.benchmark {
+    border-color: #f7931a22;
+  }
+
+  &.highlight {
+    background: #f7931a11;
+    border-color: #f7931a44;
+
+    .metric-label {
+      color: #f7931a;
+    }
+  }
+}
+
 /* Loading */
 .loading-overlay {
   display: flex;
@@ -499,3 +573,57 @@ table {
 .result-pill.win  { background: #00d4a322; color: #00d4a3; }
 .result-pill.loss { background: #f04b5c22; color: #f04b5c; }
 .result-pill.open { background: #9498b022; color: #9498b0; }
+
+/* Pagination */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #1e2130;
+}
+
+.page-btn {
+  padding: 4px 10px;
+  background: #13151c;
+  border: 1px solid #2a2d3e;
+  border-radius: 4px;
+  color: #9498b0;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: 'JetBrains Mono', monospace;
+  transition: all 0.15s;
+  min-width: 36px;
+
+  &:hover:not(:disabled) {
+    border-color: #f7931a;
+    color: #f7931a;
+  }
+
+  &.active {
+    background: #f7931a22;
+    border-color: #f7931a;
+    color: #f7931a;
+    font-weight: 600;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+.page-dots {
+  color: #5a5e78;
+  font-size: 11px;
+  padding: 0 4px;
+}
+
+.page-info {
+  font-size: 10px;
+  color: #7b7f96;
+  font-family: 'JetBrains Mono', monospace;
+  margin-left: 12px;
+}

@@ -40,7 +40,19 @@ interface BacktestStats {
   maxDrawdown: number;
   finalCapital: number;
   initialCapital: number;
-  equityCurve?: Array<{ timestamp: string; capital: number }>; // New: equity curve data
+  equityCurve?: Array<{ timestamp: string; capital: number }>;
+  // Advanced risk metrics
+  sortinoRatio?: number;
+  calmarRatio?: number;
+  maxWinStreak?: number;
+  maxLossStreak?: number;
+  avgWin?: number;
+  avgLoss?: number;
+  profitFactor?: number;
+  // Buy-and-hold benchmark
+  buyHoldReturn?: number;
+  buyHoldFinal?: number;
+  vsHoldPct?: number;
 }
 
 interface TradeRow {
@@ -97,6 +109,10 @@ export class BacktesterComponent implements OnInit, OnDestroy {
 
   stats: BacktestStats | null = null;
   trades: TradeRow[] = [];
+  allTrades: TradeRow[] = [];  // Store all trades
+  currentPage = 1;
+  tradesPerPage = 100;
+  totalPages = 1;
   isLoading = false;
   errorMessage = '';
 
@@ -181,7 +197,10 @@ export class BacktesterComponent implements OnInit, OnDestroy {
 
       // Update stats & trades
       this.stats  = data.stats  || null;
-      this.trades = (data.trades || []).slice(0, 500); // Show up to 500 rows
+      this.allTrades = data.trades || [];
+      this.totalPages = Math.ceil(this.allTrades.length / this.tradesPerPage);
+      this.currentPage = 1;
+      this.updateDisplayedTrades();
 
       // Render equity curve if data available
       this.renderEquityCurve(data.stats?.equityCurve);
@@ -258,8 +277,51 @@ export class BacktesterComponent implements OnInit, OnDestroy {
     return val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral';
   }
 
+  updateDisplayedTrades(): void {
+    const start = (this.currentPage - 1) * this.tradesPerPage;
+    const end = start + this.tradesPerPage;
+    this.trades = this.allTrades.slice(start, end);
+  }
+
+  nextPage(): void {
+    if (this.currentPage < this.totalPages) {
+      this.currentPage++;
+      this.updateDisplayedTrades();
+    }
+  }
+
+  prevPage(): void {
+    if (this.currentPage > 1) {
+      this.currentPage--;
+      this.updateDisplayedTrades();
+    }
+  }
+
+  goToPage(page: number): void {
+    if (page >= 1 && page <= this.totalPages) {
+      this.currentPage = page;
+      this.updateDisplayedTrades();
+    }
+  }
+
+  get pageNumbers(): number[] {
+    const pages: number[] = [];
+    const maxPagesToShow = 5;
+    let start = Math.max(1, this.currentPage - Math.floor(maxPagesToShow / 2));
+    let end = Math.min(this.totalPages, start + maxPagesToShow - 1);
+
+    if (end - start + 1 < maxPagesToShow) {
+      start = Math.max(1, end - maxPagesToShow + 1);
+    }
+
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    return pages;
+  }
+
   exportToCSV(): void {
-    if (!this.trades || this.trades.length === 0) {
+    if (!this.allTrades || this.allTrades.length === 0) {
       alert('No trades to export');
       return;
     }
@@ -267,8 +329,8 @@ export class BacktesterComponent implements OnInit, OnDestroy {
     // Create CSV header
     const headers = ['Timestamp', 'Direction', 'Entry Price', 'Exit Price', 'Exit Type', 'P&L', 'Result', 'Votes'];
 
-    // Create CSV rows
-    const rows = this.trades.map(trade => [
+    // Create CSV rows - export ALL trades, not just current page
+    const rows = this.allTrades.map(trade => [
       trade.timestamp,
       trade.direction,
       trade.entry.toString(),

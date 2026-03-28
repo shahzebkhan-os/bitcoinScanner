@@ -1,11 +1,14 @@
 # 🔬 Backtesting Engine Guide
 
-The Bitcoin Scanner Backtesting engine allows you to simulate your trading strategy on up to 50,000 historical candles. It uses a realistic **Position State Machine** to replicate live trading conditions and provides comprehensive analytics including an **equity curve** and **CSV export**.
+The Bitcoin Scanner Backtesting engine allows you to simulate your trading strategy on up to 50,000 historical candles. It uses a realistic **Position State Machine** to replicate live trading conditions and provides comprehensive analytics including an **equity curve**, **advanced risk metrics**, **buy-and-hold benchmark comparison**, and **CSV export**.
 
-## ✨ New Features
+## ✨ Latest Features (v2.2.0)
 
 - **📈 Equity Curve Visualization**: See your capital growth over time with an interactive area chart
 - **📥 CSV Export**: Download your backtest results for further analysis in Excel/Python
+- **📊 Advanced Risk Metrics**: Sortino ratio, Calmar ratio, profit factor, win/loss streaks
+- **📉 Buy-and-Hold Benchmark**: Compare your strategy against passive buy-and-hold
+- **📄 Trade Pagination**: Handle 1000+ trades efficiently with paginated view
 - **🎨 Improved UI/UX**: Enhanced loading states, empty states, and better layout that prevents chart overlap
 - **🐛 Bug Fixes**: Fixed trade log overlapping chart, division-by-zero in volume filter
 - **🧪 Comprehensive Tests**: Full test coverage for backtester engine (100+ test cases)
@@ -82,6 +85,30 @@ The equity curve shows your capital growth over time as a smooth area chart:
 - **Visual insights**: Identify periods of consistent growth vs. drawdowns
 - **Use cases**: Compare different parameter sets by their equity curve shape
 
+### 📊 Advanced Metrics
+The Advanced Metrics section provides deep insights into strategy performance:
+
+**Risk-Adjusted Returns:**
+- **Sortino Ratio**: Measures return per unit of downside volatility (higher is better, >1 is good)
+- **Calmar Ratio**: Total return divided by max drawdown (higher is better, >1 is good)
+- **Profit Factor**: Gross profit divided by gross loss (>1 means profitable, >2 is excellent)
+
+**Trade Quality:**
+- **Avg Win / Avg Loss**: Shows average profit per winning trade vs. average loss per losing trade
+- **Win/Loss Ratio**: Calculated from the above (aim for >1.5:1)
+
+**Streaks:**
+- **Max Win Streak**: Longest consecutive winning trades
+- **Max Loss Streak**: Longest consecutive losing trades (critical for psychological resilience)
+
+**Benchmark Comparison:**
+- **Buy & Hold Return**: What you would have made by simply buying at start and holding
+- **Strategy vs Buy & Hold**: Your strategy's outperformance or underperformance vs. passive strategy
+  - Green (+%) = Outperforming buy-and-hold
+  - Red (-%) = Underperforming buy-and-hold
+
+> **💡 Tip**: A good strategy should consistently outperform buy-and-hold across different time periods and market conditions.
+
 ### Chart Markers
 - **▲ BUY / ▼ SELL**: Entry points.
 - **🟢 PROFIT**: Position closed with a gain.
@@ -90,8 +117,14 @@ The equity curve shows your capital growth over time as a smooth area chart:
 ### Trade Log
 The log shows a detailed row-by-row breakdown of every trade, including the **Consensus Votes** (e.g., `4/6`) that triggered the entry.
 
+**Pagination:**
+- When you have more than 100 trades, the table is automatically paginated
+- Navigate with Prev/Next buttons or jump to specific pages
+- Page info shows: "Page 1 of 5 (450 total trades)"
+- Up to 100 trades displayed per page for optimal performance
+
 **Export Options:**
-- Click **📥 Export CSV** to download the full trade log
+- Click **📥 Export CSV** to download the full trade log (all trades, not just current page)
 - Open in Excel, Google Sheets, or Python for further analysis
 - CSV includes all columns: Timestamp, Direction, Entry, Exit, P&L, Result, Votes
 
@@ -145,9 +178,13 @@ The log shows a detailed row-by-row breakdown of every trade, including the **Co
 
 - **Total Return %**: (Final - Initial) / Initial × 100
 - **Sharpe-like Ratio**: Total Return / Max Drawdown (higher is better)
+- **Sortino Ratio**: Mean return / downside deviation (better than Sharpe for asymmetric returns)
+- **Calmar Ratio**: Return / Max Drawdown (measures risk-adjusted performance)
 - **Win Rate**: Should be consistent across configs (±5%)
+- **Profit Factor**: Gross Profit / Gross Loss (>1.5 is solid)
 - **Average Win vs. Average Loss**: Aim for > 1.5:1
 - **Trade Frequency**: More trades = more data = more statistical confidence
+- **vs Buy & Hold**: Strategy should beat passive holding across different periods
 
 ---
 
@@ -168,6 +205,11 @@ The log shows a detailed row-by-row breakdown of every trade, including the **Co
 ### "Browser slowdown with 50k candles"
 - **Workaround**: Start with 5k candles, increase gradually
 - **Tip**: Close other browser tabs to free memory
+- **Note**: Trade pagination now handles 1000+ trades efficiently
+
+### "Too many trades to view"
+- **Status**: ✅ Fixed with pagination feature
+- **Details**: Trade log now paginated at 100 trades per page, handles unlimited trades
 
 ---
 
@@ -189,6 +231,7 @@ The log shows a detailed row-by-row breakdown of every trade, including the **Co
 - **Route**: `POST http://localhost:8765/backtest`
 - **Max candles**: 50,000
 - **Response**: Includes candles[], signals[], stats{}, trades[], equityCurve[]
+- **Advanced Stats**: sortinoRatio, calmarRatio, profitFactor, maxWinStreak, maxLossStreak, buyHoldReturn, vsHoldPct
 
 ---
 
@@ -198,17 +241,28 @@ The following features are planned for future releases:
 
 - [ ] **Multi-parameter grid search**: Run 100+ backtests automatically and compare results
 - [ ] **Walk-forward optimization**: Test on in-sample data, validate on out-of-sample
-- [ ] **Monte Carlo simulation**: Randomize trade order to test robustness
-- [ ] **Benchmark comparison**: Compare strategy vs. buy-and-hold
-- [ ] **Risk metrics**: Sortino ratio, Calmar ratio, win/loss streaks
-- [ ] **Trade pagination**: Handle 1000+ trades with infinite scroll
+- [ ] **Monte Carlo simulation**: Randomize trade order to test robustness (implementation in progress)
+- [x] **Benchmark comparison**: Compare strategy vs. buy-and-hold ✅ IMPLEMENTED
+- [x] **Risk metrics**: Sortino ratio, Calmar ratio, win/loss streaks ✅ IMPLEMENTED
+- [x] **Trade pagination**: Handle 1000+ trades with infinite scroll ✅ IMPLEMENTED
 - [ ] **Custom strategy builder**: Create your own indicator combinations in the UI
 
 ---
 
 ## 📝 Changelog
 
-### Version 2.1.0 (Latest)
+### Version 2.2.0 (Latest)
+- ✨ Added advanced risk metrics (Sortino ratio, Calmar ratio, profit factor)
+- ✨ Added buy-and-hold benchmark comparison
+- ✨ Added trade pagination (100 trades per page)
+- ✨ Added win/loss streak tracking
+- ✨ Added average win vs. average loss metrics
+- 📊 Enhanced stats grid with 8 new metrics
+- 🎨 Improved UI layout with Advanced Metrics section
+- 📈 Strategy vs. buy-and-hold comparison highlighted
+- 📚 Updated documentation with new metrics explanations
+
+### Version 2.1.0
 - ✨ Added equity curve visualization
 - ✨ Added CSV export functionality
 - 🐛 Fixed trade log overlapping chart
