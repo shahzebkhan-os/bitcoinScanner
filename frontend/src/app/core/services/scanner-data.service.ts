@@ -21,6 +21,7 @@ export class ScannerDataService {
   public consensus$ = new BehaviorSubject<ConsensusResult | null>(null);
   public signalFeed$ = new BehaviorSubject<FiredSignal[]>([]);
   public overallTrend$ = new BehaviorSubject<OverallTrend | null>(null);
+  public riskRewardRatio$ = new BehaviorSubject<number>(1.5);
   public sessionStats$ = new BehaviorSubject<SessionStats>({
     total: 0,
     longs: 0,
@@ -74,7 +75,7 @@ export class ScannerDataService {
         strategies: message.strategies,
         strength: message.strength,
         rsi: message.rsi,
-        volumeRatio: message.volumeRatio ?? message.volume_ratio ?? 0
+        volumeRatio: message.volumeRatio ?? 0
       };
 
       const currentSignals = this.signalFeed$.value;

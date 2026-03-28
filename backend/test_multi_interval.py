@@ -1,5 +1,7 @@
 from datetime import datetime
 
+import pandas as pd
+
 from scanner.indicators import IndicatorSnapshot
 from scanner.strategies import run_all_strategies
 
@@ -45,3 +47,22 @@ def test_run_all_strategies_always_returns_6_votes():
         "BreakoutStrategy",
         "MACDMomentumStrategy",
     }
+
+
+def test_run_all_strategies_with_dataframe_returns_6_votes():
+    config = {"indicators": {"rsi_oversold": 30, "rsi_overbought": 70}}
+    snapshot = _snapshot()
+
+    times = pd.date_range(end=datetime.utcnow(), periods=25, freq="min", tz="UTC")
+    df = pd.DataFrame({
+        "time": times,
+        "open": [100.0] * 25,
+        "high": [101.0] * 25,
+        "low": [99.0] * 25,
+        "close": [100.0] * 25,
+        "volume": [1000.0] * 25,
+    })
+
+    results = run_all_strategies(snapshot, config, df)
+    assert len(results) == 6
+    assert all(hasattr(r, "direction") for r in results)

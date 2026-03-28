@@ -18,7 +18,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from scanner.fetcher import fetch_candles, fetch_ticker, CandleBuffer
 from scanner.indicators import calculate_indicators
 from scanner.strategies import run_all_strategies
-from scanner.consensus import evaluate_consensus
+from scanner.consensus import evaluate_consensus, ConsensusResult
 from scanner.alerts import dispatch_alerts
 
 # API modules
@@ -191,7 +191,7 @@ async def scanner_loop():
 
             # Fallback chart interval if configured one unavailable
             if chart_snapshot is None or chart_consensus is None:
-                fallback_interval = next(iter(interval_results.keys()))
+                fallback_interval = next(i for i in scan_intervals if i in interval_results)
                 chart_interval = fallback_interval
                 chart_snapshot = interval_results[fallback_interval]["snapshot"]
                 chart_results = interval_results[fallback_interval]["strategies"]
@@ -214,13 +214,15 @@ async def scanner_loop():
                             strength_total += strategy.strength
 
                 if agreeing:
-                    chart_consensus.direction = aggregated_direction
-                    chart_consensus.long_votes = total_long
-                    chart_consensus.short_votes = total_short
-                    chart_consensus.neutral_votes = overall_trend["totalNeutralVotes"]
-                    chart_consensus.agreeing_strategies = agreeing
-                    chart_consensus.avg_strength = strength_total / len(agreeing)
-                    chart_consensus.fired = len(agreeing) >= config.get('min_votes', 3)
+                    chart_consensus = ConsensusResult(
+                        direction=aggregated_direction,
+                        long_votes=total_long,
+                        short_votes=total_short,
+                        neutral_votes=overall_trend["totalNeutralVotes"],
+                        avg_strength=strength_total / len(agreeing),
+                        agreeing_strategies=agreeing,
+                        fired=len(agreeing) >= config.get('min_votes', 3),
+                    )
 
             # Always broadcast tick
             await broadcast_tick(

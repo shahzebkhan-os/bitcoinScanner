@@ -324,16 +324,16 @@ def run_all_strategies(snapshot: IndicatorSnapshot, config: dict, df: Optional[p
         logger.error(f"Error running strategies: {e}", exc_info=True)
 
     # Ensure all 6 strategy votes are always present
-    expected = {
+    expected = [
         "EMAcrossoverStrategy",
         "RSIBollingerStrategy",
         "VWAPBounceStrategy",
         "RangeTradingStrategy",
         "BreakoutStrategy",
         "MACDMomentumStrategy",
-    }
+    ]
     present = {r.strategy_name for r in results}
-    for missing_name in sorted(expected - present):
+    for missing_name in [name for name in expected if name not in present]:
         results.append(
             SignalResult(
                 strategy_name=missing_name,

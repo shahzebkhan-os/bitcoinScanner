@@ -20,6 +20,10 @@ import { Subscription } from 'rxjs';
   `]
 })
 export class CandlestickChartComponent implements OnInit, OnDestroy {
+  private static readonly MAX_MARKERS = 50;
+  private static readonly HORIZONTAL_WINDOW_CANDLES = 120;
+  private static readonly DEFAULT_STOP_LOSS_PCT = 0.002;
+
   @ViewChild('chartContainer', { static: true }) chartContainer!: ElementRef;
 
   private chart!: IChartApi;
@@ -180,9 +184,16 @@ export class CandlestickChartComponent implements OnInit, OnDestroy {
     const latest = candles[candles.length - 1];
     const latestTime = latest.time / 1000;
     const entry = latest.close;
-    const stopLoss = consensus.direction === 'LONG' ? latest.low : latest.high;
+    const candleStop = consensus.direction === 'LONG' ? latest.low : latest.high;
+    const pctStop = consensus.direction === 'LONG'
+      ? entry * (1 - CandlestickChartComponent.DEFAULT_STOP_LOSS_PCT)
+      : entry * (1 + CandlestickChartComponent.DEFAULT_STOP_LOSS_PCT);
+    const stopLoss = consensus.direction === 'LONG'
+      ? Math.min(candleStop, pctStop)
+      : Math.max(candleStop, pctStop);
     const risk = Math.max(0.0001, Math.abs(entry - stopLoss));
-    const target = consensus.direction === 'LONG' ? entry + (risk * 1.5) : entry - (risk * 1.5);
+    const targetRr = this.scannerData.riskRewardRatio$.value || 1.5;
+    const target = consensus.direction === 'LONG' ? entry + (risk * targetRr) : entry - (risk * targetRr);
 
     const text = `${consensus.direction} E:${entry.toFixed(2)} SL:${stopLoss.toFixed(2)} TP:${target.toFixed(2)}`;
     this.markers.push({
@@ -192,10 +203,12 @@ export class CandlestickChartComponent implements OnInit, OnDestroy {
       shape,
       text,
     });
-    this.markers = this.markers.slice(-50);
+    this.markers = this.markers.slice(-CandlestickChartComponent.MAX_MARKERS);
     this.candlestickSeries.setMarkers(this.markers);
 
-    const horizontalWindow = candles.slice(-60).map((c) => ({ time: Math.floor(c.time / 1000) as any }));
+    const horizontalWindow = candles
+      .slice(-CandlestickChartComponent.HORIZONTAL_WINDOW_CANDLES)
+      .map((c) => ({ time: Math.floor(c.time / 1000) as any }));
     this.entryLineSeries.setData(horizontalWindow.map((p) => ({ ...p, value: entry })));
     this.stopLineSeries.setData(horizontalWindow.map((p) => ({ ...p, value: stopLoss })));
     this.targetLineSeries.setData(horizontalWindow.map((p) => ({ ...p, value: target })));
