@@ -323,4 +323,24 @@ def run_all_strategies(snapshot: IndicatorSnapshot, config: dict, df: Optional[p
     except Exception as e:
         logger.error(f"Error running strategies: {e}", exc_info=True)
 
+    # Ensure all 6 strategy votes are always present
+    expected = {
+        "EMAcrossoverStrategy",
+        "RSIBollingerStrategy",
+        "VWAPBounceStrategy",
+        "RangeTradingStrategy",
+        "BreakoutStrategy",
+        "MACDMomentumStrategy",
+    }
+    present = {r.strategy_name for r in results}
+    for missing_name in sorted(expected - present):
+        results.append(
+            SignalResult(
+                strategy_name=missing_name,
+                direction="NEUTRAL",
+                strength=0.0,
+                reason="Strategy vote unavailable due to evaluation error"
+            )
+        )
+
     return results

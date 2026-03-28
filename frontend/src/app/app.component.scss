@@ -232,6 +232,30 @@
   vertical-align: middle;
 }
 
+.trend-horizon {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.trend-intervals {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: -0.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.interval-chip {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.2rem 0.45rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
 // Phase 2: Volume status badge
 .volume-status {
   font-size: 0.65rem;

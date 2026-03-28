@@ -74,7 +74,8 @@ async def broadcast_tick(
     candles: list[dict],
     snapshot: IndicatorSnapshot,
     results: list[SignalResult],
-    consensus: ConsensusResult
+    consensus: ConsensusResult,
+    overall_trend: dict | None = None,
 ):
     """
     Broadcast tick data to all connected clients.
@@ -102,7 +103,8 @@ async def broadcast_tick(
                 for r in results
             ],
             "consensus": consensus.to_dict(),
-            "signalFired": consensus.fired
+            "signalFired": consensus.fired,
+            "overallTrend": overall_trend or {},
         }
 
         await manager.broadcast(payload)

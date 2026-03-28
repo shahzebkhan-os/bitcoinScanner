@@ -1,6 +1,6 @@
-import { Component, ElementRef, Input, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { createChart, IChartApi, ISeriesApi, CandlestickData, SeriesMarker } from 'lightweight-charts';
+import { createChart, IChartApi, ISeriesApi, CandlestickData, SeriesMarker, LineStyle } from 'lightweight-charts';
 import { Candle, ConsensusResult } from '../core/models/scanner.models';
 import { ScannerDataService } from '../core/services/scanner-data.service';
 import { Subscription } from 'rxjs';
@@ -24,8 +24,12 @@ export class CandlestickChartComponent implements OnInit, OnDestroy {
 
   private chart!: IChartApi;
   private candlestickSeries!: ISeriesApi<'Candlestick'>;
+  private entryLineSeries!: ISeriesApi<'Line'>;
+  private stopLineSeries!: ISeriesApi<'Line'>;
+  private targetLineSeries!: ISeriesApi<'Line'>;
   private subscriptions: Subscription[] = [];
   private resizeObserver!: ResizeObserver;
+  private markers: SeriesMarker<any>[] = [];
 
   constructor(private scannerData: ScannerDataService) {}
 
@@ -128,6 +132,27 @@ export class CandlestickChartComponent implements OnInit, OnDestroy {
       wickDownColor: '#f04b5c',
     });
 
+    this.entryLineSeries = this.chart.addLineSeries({
+      color: '#f7931a',
+      lineWidth: 1,
+      lineStyle: LineStyle.Dashed,
+      title: 'Entry',
+    });
+
+    this.stopLineSeries = this.chart.addLineSeries({
+      color: '#f04b5c',
+      lineWidth: 1,
+      lineStyle: LineStyle.Dashed,
+      title: 'Stop',
+    });
+
+    this.targetLineSeries = this.chart.addLineSeries({
+      color: '#00d4a3',
+      lineWidth: 1,
+      lineStyle: LineStyle.Dashed,
+      title: 'Target',
+    });
+
     // Use ResizeObserver for more robust resizing
     this.resizeObserver = new ResizeObserver(entries => {
       if (entries.length === 0 || !entries[0].contentRect) return;
@@ -145,25 +170,34 @@ export class CandlestickChartComponent implements OnInit, OnDestroy {
   }
 
   private addMarker(consensus: ConsensusResult): void {
-    const markers: SeriesMarker<any>[] = [];
     const color = consensus.direction === 'LONG' ? '#00d4a3' : '#f04b5c';
     const shape = consensus.direction === 'LONG' ? 'arrowUp' : 'arrowDown';
-    const text = `${consensus.direction} (${consensus.avgStrength.toFixed(2)})`;
-
-    // Only add marker for the latest point if we have data
     const candles = this.scannerData.candles$.value;
-    if (candles.length > 0) {
-      const latestTime = candles[candles.length - 1].time / 1000;
-      
-      markers.push({
-        time: latestTime as any,
-        position: consensus.direction === 'LONG' ? 'belowBar' : 'aboveBar',
-        color: color,
-        shape: shape,
-        text: text,
-      });
-
-      this.candlestickSeries.setMarkers(markers);
+    if (candles.length === 0) {
+      return;
     }
+
+    const latest = candles[candles.length - 1];
+    const latestTime = latest.time / 1000;
+    const entry = latest.close;
+    const stopLoss = consensus.direction === 'LONG' ? latest.low : latest.high;
+    const risk = Math.max(0.0001, Math.abs(entry - stopLoss));
+    const target = consensus.direction === 'LONG' ? entry + (risk * 1.5) : entry - (risk * 1.5);
+
+    const text = `${consensus.direction} E:${entry.toFixed(2)} SL:${stopLoss.toFixed(2)} TP:${target.toFixed(2)}`;
+    this.markers.push({
+      time: latestTime as any,
+      position: consensus.direction === 'LONG' ? 'belowBar' : 'aboveBar',
+      color,
+      shape,
+      text,
+    });
+    this.markers = this.markers.slice(-50);
+    this.candlestickSeries.setMarkers(this.markers);
+
+    const horizontalWindow = candles.slice(-60).map((c) => ({ time: Math.floor(c.time / 1000) as any }));
+    this.entryLineSeries.setData(horizontalWindow.map((p) => ({ ...p, value: entry })));
+    this.stopLineSeries.setData(horizontalWindow.map((p) => ({ ...p, value: stopLoss })));
+    this.targetLineSeries.setData(horizontalWindow.map((p) => ({ ...p, value: target })));
   }
 }

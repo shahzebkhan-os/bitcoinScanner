@@ -19,12 +19,18 @@
               {{ priceChangePercent | number:'1.2-2' }}%
             </span>
           </div>
-          <div class="trend-summary" [class]="getOverallTrendClass(scannerData.latestIndicators$ | async)">
+          <div class="trend-summary" [class]="getOverallTrendClass(scannerData.overallTrend$ | async)">
             <span class="trend-label">Overall Trend:</span>
-            <span class="trend-value">{{ getOverallTrend(scannerData.latestIndicators$ | async) }}</span>
-            <span class="direction-indicator" [class]="getOverallTrendClass(scannerData.latestIndicators$ | async)">
-              {{ getOverallTrend(scannerData.latestIndicators$ | async) === 'BULLISH' ? '🚀' : getOverallTrend(scannerData.latestIndicators$ | async) === 'BEARISH' ? '🔥' : '⚖️' }}
+            <span class="trend-value">{{ getOverallTrend(scannerData.overallTrend$ | async) }}</span>
+            <span class="direction-indicator" [class]="getOverallTrendClass(scannerData.overallTrend$ | async)">
+              {{ getOverallTrend(scannerData.overallTrend$ | async) === 'BULLISH' ? '🚀' : getOverallTrend(scannerData.overallTrend$ | async) === 'BEARISH' ? '🔥' : '⚖️' }}
             </span>
+            <span class="trend-horizon">for next 1 min</span>
+          </div>
+          <div class="trend-intervals" *ngIf="scannerData.overallTrend$ | async as overallTrend">
+            <span class="interval-chip">1m: {{ getIntervalConsensus(overallTrend, '1m') }}</span>
+            <span class="interval-chip">2m: {{ getIntervalConsensus(overallTrend, '2m') }}</span>
+            <span class="interval-chip">3m: {{ getIntervalConsensus(overallTrend, '3m') }}</span>
           </div>
           <div class="indicator-row">
             <span [class.bullish]="getRsiZoneClass(scannerData.latestIndicators$ | async) === 'bullish'"
@@ -183,7 +189,7 @@
   </div>
 
     <div class="panel chart-panel">
-      <h2>Real-time Price Chart</h2>
+      <h2>Real-time Price Chart (300 candles)</h2>
       <app-candlestick-chart></app-candlestick-chart>
     </div>
 
@@ -206,4 +212,3 @@
     </div>
   </div>
 </div>
-

@@ -64,3 +64,20 @@ export interface SessionStats {
   shorts: number;
   lastSignalTime: string | null;
 }
+
+export interface IntervalTrendBreakdown {
+  longVotes: number;
+  shortVotes: number;
+  neutralVotes: number;
+  consensus: string;
+}
+
+export interface OverallTrend {
+  timeHorizon: string;
+  direction: string;
+  confidence: number;
+  totalLongVotes: number;
+  totalShortVotes: number;
+  totalNeutralVotes: number;
+  intervals: Record<string, IntervalTrendBreakdown>;
+}

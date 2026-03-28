@@ -7,7 +7,8 @@ import {
   SignalResult,
   ConsensusResult,
   FiredSignal,
-  SessionStats
+  SessionStats,
+  OverallTrend
 } from '../models/scanner.models';
 
 @Injectable({
@@ -19,6 +20,7 @@ export class ScannerDataService {
   public strategyVotes$ = new BehaviorSubject<SignalResult[]>([]);
   public consensus$ = new BehaviorSubject<ConsensusResult | null>(null);
   public signalFeed$ = new BehaviorSubject<FiredSignal[]>([]);
+  public overallTrend$ = new BehaviorSubject<OverallTrend | null>(null);
   public sessionStats$ = new BehaviorSubject<SessionStats>({
     total: 0,
     longs: 0,
@@ -58,6 +60,10 @@ export class ScannerDataService {
         this.consensus$.next(message.consensus);
       }
 
+      if (message.overallTrend) {
+        this.overallTrend$.next(message.overallTrend);
+      }
+
     } else if (message.type === 'signal') {
       // Add to signal feed
       const signal: FiredSignal = {
@@ -68,7 +74,7 @@ export class ScannerDataService {
         strategies: message.strategies,
         strength: message.strength,
         rsi: message.rsi,
-        volumeRatio: message.volume_ratio
+        volumeRatio: message.volumeRatio ?? message.volume_ratio ?? 0
       };
 
       const currentSignals = this.signalFeed$.value;
