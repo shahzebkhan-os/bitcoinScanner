@@ -3,12 +3,13 @@ import { CommonModule } from '@angular/common';
 import { ScannerDataService } from './core/services/scanner-data.service';
 import { WebsocketService } from './core/services/websocket.service';
 import { IndicatorSnapshot, ConsensusResult } from './core/models/scanner.models';
+import { CandlestickChartComponent } from './candlestick-chart/candlestick-chart.component';
 import { Subject, takeUntil } from 'rxjs';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, CandlestickChartComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
   providers: [WebsocketService, ScannerDataService]
@@ -134,35 +135,46 @@ export class AppComponent implements OnInit, OnDestroy {
     return indicators.volumeRatio > 1.5 ? 'bullish' : indicators.volumeRatio < 0.8 ? 'bearish' : 'neutral';
   }
 
-  // Phase 2: Overall trend summary
+  // Phase 2: Overall trend summary — uses strategy votes + key indicators
   getOverallTrend(indicators: IndicatorSnapshot | null): string {
     if (!indicators) return 'NEUTRAL';
 
-    let bullishCount = 0;
-    let bearishCount = 0;
+    let bullishScore = 0;
+    let bearishScore = 0;
 
-    // EMA trend
-    if (indicators.emaFast > indicators.emaSlow) bullishCount++;
-    else if (indicators.emaFast < indicators.emaSlow) bearishCount++;
+    // 1. Strategy votes (most important — they are 6 independent evaluators)
+    const votes = this.scannerData.strategyVotes$.value;
+    if (votes && votes.length > 0) {
+      for (const vote of votes) {
+        if (vote.direction === 'LONG') bullishScore += 2;
+        else if (vote.direction === 'SHORT') bearishScore += 2;
+      }
+    }
 
-    // MACD trend
-    if (indicators.macdHistogram > 0) bullishCount++;
-    else if (indicators.macdHistogram < 0) bearishCount++;
+    // 2. EMA trend (trend-following)
+    if (indicators.emaFast > indicators.emaSlow) bullishScore++;
+    else if (indicators.emaFast < indicators.emaSlow) bearishScore++;
 
-    // RSI zone
-    if (indicators.rsi < 30) bullishCount++;
-    else if (indicators.rsi > 70) bearishCount++;
+    // 3. RSI zone (mean-reversion — contrarian)
+    if (indicators.rsi < 30) bullishScore += 2; // Oversold = strong bullish opportunity
+    else if (indicators.rsi < 40) bullishScore++;
+    else if (indicators.rsi > 70) bearishScore += 2; // Overbought = strong bearish signal
+    else if (indicators.rsi > 60) bearishScore++;
 
-    // VWAP position
-    if (indicators.closeVsVwap === 'above') bullishCount++;
-    else if (indicators.closeVsVwap === 'below') bearishCount++;
+    // 4. Bollinger Band position (mean-reversion — contrarian)
+    if (indicators.closeVsBb === 'below_lower') bullishScore += 2; // Oversold bounce
+    else if (indicators.closeVsBb === 'above_upper') bearishScore += 2; // Overbought rejection
 
-    // Price change
-    if (this.priceChange > 0) bullishCount++;
-    else if (this.priceChange < 0) bearishCount++;
+    // 5. MACD momentum
+    if (indicators.macdHistogram > 0) bullishScore++;
+    else if (indicators.macdHistogram < 0) bearishScore++;
 
-    if (bullishCount > bearishCount) return 'BULLISH';
-    if (bearishCount > bullishCount) return 'BEARISH';
+    // 6. Price action (tick-to-tick)
+    if (this.priceChange > 0) bullishScore++;
+    else if (this.priceChange < 0) bearishScore++;
+
+    if (bullishScore > bearishScore) return 'BULLISH';
+    if (bearishScore > bullishScore) return 'BEARISH';
     return 'NEUTRAL';
   }
 

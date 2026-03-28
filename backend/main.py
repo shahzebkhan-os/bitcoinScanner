@@ -14,7 +14,7 @@ import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 # Scanner modules
-from scanner.fetcher import fetch_candles, CandleBuffer
+from scanner.fetcher import fetch_candles, fetch_ticker, CandleBuffer
 from scanner.indicators import calculate_indicators
 from scanner.strategies import run_all_strategies
 from scanner.consensus import evaluate_consensus
@@ -78,6 +78,9 @@ async def scanner_loop():
         start = time.monotonic()
 
         try:
+            # Fetch ticker for real-time price update
+            ticker_price = await fetch_ticker(config['pair'])
+
             # Fetch candles
             candles = await fetch_candles(
                 pair=config['pair'],
@@ -102,6 +105,11 @@ async def scanner_loop():
 
                         # Evaluate consensus
                         consensus = evaluate_consensus(results, config)
+
+                        # Update latest candle in buffer and snapshot with real-time ticker price
+                        if ticker_price:
+                            buffer.update_latest_price(ticker_price)
+                            snapshot.current_price = ticker_price
 
                         # Always broadcast tick (Angular dashboard needs it)
                         await broadcast_tick(

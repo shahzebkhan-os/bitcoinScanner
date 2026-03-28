@@ -22,6 +22,9 @@
           <div class="trend-summary" [class]="getOverallTrendClass(scannerData.latestIndicators$ | async)">
             <span class="trend-label">Overall Trend:</span>
             <span class="trend-value">{{ getOverallTrend(scannerData.latestIndicators$ | async) }}</span>
+            <span class="direction-indicator" [class]="getOverallTrendClass(scannerData.latestIndicators$ | async)">
+              {{ getOverallTrend(scannerData.latestIndicators$ | async) === 'BULLISH' ? '🚀' : getOverallTrend(scannerData.latestIndicators$ | async) === 'BEARISH' ? '🔥' : '⚖️' }}
+            </span>
           </div>
           <div class="indicator-row">
             <span [class.bullish]="getRsiZoneClass(scannerData.latestIndicators$ | async) === 'bullish'"
@@ -179,7 +182,12 @@
     </div>
   </div>
 
-  <div class="panel signals-panel">
+    <div class="panel chart-panel">
+      <h2>Real-time Price Chart</h2>
+      <app-candlestick-chart></app-candlestick-chart>
+    </div>
+
+    <div class="panel signals-panel">
     <h2>Signal Feed</h2>
     <div class="signals-feed">
       <div *ngFor="let signal of (scannerData.signalFeed$ | async)"

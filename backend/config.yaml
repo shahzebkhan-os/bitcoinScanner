@@ -1,4 +1,4 @@
-pair: "B-BTC_USDT"
+pair: "BTCUSDT"  # Using BTCUSDT for accurate ticker price. Fallback to B-BTC_USDT for candles.
 interval: "1m"
 candle_buffer_size: 200
 poll_interval_seconds: 1
