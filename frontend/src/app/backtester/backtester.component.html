@@ -139,6 +139,44 @@
     </button>
 
     <div class="error-msg" *ngIf="errorMessage">⚠ {{ errorMessage }}</div>
+
+    <div class="divider"></div>
+    <p class="section-title">🚀 Future Enhancements</p>
+    <div class="btn-group">
+      <button (click)="runGridSearch()" [disabled]="enhancementLoading">Grid Search</button>
+      <button (click)="runWalkForward()" [disabled]="enhancementLoading">Walk-Forward</button>
+      <button (click)="runMonteCarlo()" [disabled]="enhancementLoading">Monte Carlo</button>
+      <button (click)="runCustomStrategyBacktest()" [disabled]="enhancementLoading">Custom Builder</button>
+    </div>
+    <div class="error-msg" *ngIf="enhancementError">⚠ {{ enhancementError }}</div>
+
+    <div class="control-group">
+      <label>Custom Strategy Selection</label>
+      <label class="toggle-label">
+        <input type="checkbox" [(ngModel)]="customStrategySelected.EMAcrossoverStrategy" />
+        <span class="toggle-track"><span class="toggle-thumb"></span></span> EMA Crossover
+      </label>
+      <label class="toggle-label">
+        <input type="checkbox" [(ngModel)]="customStrategySelected.RSIBollingerStrategy" />
+        <span class="toggle-track"><span class="toggle-thumb"></span></span> RSI Bollinger
+      </label>
+      <label class="toggle-label">
+        <input type="checkbox" [(ngModel)]="customStrategySelected.VWAPBounceStrategy" />
+        <span class="toggle-track"><span class="toggle-thumb"></span></span> VWAP Bounce
+      </label>
+      <label class="toggle-label">
+        <input type="checkbox" [(ngModel)]="customStrategySelected.RangeTradingStrategy" />
+        <span class="toggle-track"><span class="toggle-thumb"></span></span> Range Trading
+      </label>
+      <label class="toggle-label">
+        <input type="checkbox" [(ngModel)]="customStrategySelected.BreakoutStrategy" />
+        <span class="toggle-track"><span class="toggle-thumb"></span></span> Breakout
+      </label>
+      <label class="toggle-label">
+        <input type="checkbox" [(ngModel)]="customStrategySelected.MACDMomentumStrategy" />
+        <span class="toggle-track"><span class="toggle-thumb"></span></span> MACD Momentum
+      </label>
+    </div>
   </aside>
 
   <!-- ── Main Content ─────────────────────────────────── -->
@@ -281,15 +319,17 @@
     </div>
 
     <!-- Equity Curve Section -->
-    <div class="equity-section" *ngIf="stats?.equityCurve && stats.equityCurve.length > 0">
+    <div class="equity-section" *ngIf="stats as statsData">
+      <ng-container *ngIf="statsData.equityCurve && statsData.equityCurve.length > 0">
       <div class="equity-header">
         <h3>📈 Equity Curve</h3>
         <span class="equity-stats">
-          Start: ${{ stats.initialCapital | number:'1.0-0' }} → End: ${{ stats.finalCapital | number:'1.0-0' }}
-          ({{ ((stats.finalCapital - stats.initialCapital) / stats.initialCapital * 100) | number:'1.1-1' }}%)
+          Start: ${{ statsData.initialCapital | number:'1.0-0' }} → End: ${{ statsData.finalCapital | number:'1.0-0' }}
+          ({{ ((statsData.finalCapital - statsData.initialCapital) / statsData.initialCapital * 100) | number:'1.1-1' }}%)
         </span>
       </div>
       <div #equityChartContainer class="equity-chart"></div>
+      </ng-container>
     </div>
 
     <!-- Trades Section (Takes remaining space, scrolls internally) -->
@@ -375,6 +415,76 @@
       <div class="empty-icon">📊</div>
       <h3>No backtest results yet</h3>
       <p>Configure your strategy parameters in the sidebar and click "Run Backtest" to begin.</p>
+    </div>
+
+    <div class="metrics-section" *ngIf="gridSearchResults.length > 0">
+      <div class="metrics-header"><h3>🧠 Grid Search Top Results</h3></div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Params</th>
+              <th>Score</th>
+              <th>Final Capital</th>
+              <th>Max DD</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let r of gridSearchResults; let i = index">
+              <td>{{ i + 1 }}</td>
+              <td>{{ formatParams(r.params) }}</td>
+              <td>{{ r.score | number:'1.2-2' }}</td>
+              <td>${{ r.stats.finalCapital | number:'1.0-0' }}</td>
+              <td>{{ r.stats.maxDrawdown | number:'1.2-2' }}%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="metrics-section" *ngIf="walkForwardSummary">
+      <div class="metrics-header"><h3>🧪 Walk-Forward Summary</h3></div>
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-label">Windows</div>
+          <div class="metric-value">{{ walkForwardSummary.windowsEvaluated || 0 }}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Avg In-Sample Capital</div>
+          <div class="metric-value">${{ walkForwardSummary.avgInSampleFinalCapital || 0 | number:'1.0-0' }}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Avg Out-of-Sample Capital</div>
+          <div class="metric-value">${{ walkForwardSummary.avgOutOfSampleFinalCapital || 0 | number:'1.0-0' }}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Stability</div>
+          <div class="metric-value">{{ walkForwardSummary.stabilityPct || 0 | number:'1.2-2' }}%</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="metrics-section" *ngIf="monteCarloSummary">
+      <div class="metrics-header"><h3>🎲 Monte Carlo Summary</h3></div>
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-label">Iterations</div>
+          <div class="metric-value">{{ monteCarloSummary.iterations || 0 }}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Mean Final Capital</div>
+          <div class="metric-value">${{ monteCarloSummary.meanFinalCapital || 0 | number:'1.0-0' }}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">P5 Final Capital</div>
+          <div class="metric-value">${{ monteCarloSummary.p5FinalCapital || 0 | number:'1.0-0' }}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">P95 Final Capital</div>
+          <div class="metric-value">${{ monteCarloSummary.p95FinalCapital || 0 | number:'1.0-0' }}</div>
+        </div>
+      </div>
     </div>
 
   </main>
