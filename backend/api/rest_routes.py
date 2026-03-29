@@ -215,6 +215,16 @@ def setup_routes(app: FastAPI, config: dict, start_time: datetime, runtime_state
             short_total  = 0
 
             trade_rows = []
+            equity_curve = [{"timestamp": signals[0]["timestamp"] if signals else "", "capital": initial_capital}]
+
+            # Advanced metrics tracking
+            returns_list = []  # For Sortino ratio
+            win_streak = 0
+            loss_streak = 0
+            max_win_streak = 0
+            max_loss_streak = 0
+            current_streak_type = None  # "win" or "loss"
+
             for s in signals:
                 entry  = s["entry"]
                 exit_p = s.get("exitPrice")
@@ -236,16 +246,45 @@ def setup_routes(app: FastAPI, config: dict, start_time: datetime, runtime_state
                     pnl     = trade_capital * pct_chg
                     capital += pnl
                     total_pnl += pnl
+
+                    # Track return for Sortino ratio
+                    returns_list.append(pct_chg * 100)  # Store as percentage
+
+                    # Track equity curve on each trade close
+                    if s.get("exitTimestamp"):
+                        equity_curve.append({
+                            "timestamp": s["exitTimestamp"],
+                            "capital": round(capital, 2)
+                        })
+
                     if pnl > 0:
                         total_profit += pnl
                         wins_count += 1
                         if s["direction"] == "LONG": long_wins += 1
                         else: short_wins += 1
                         result_label = "WIN"
+
+                        # Track win streak
+                        if current_streak_type == "win":
+                            win_streak += 1
+                        else:
+                            win_streak = 1
+                            current_streak_type = "win"
+                        max_win_streak = max(max_win_streak, win_streak)
+                        loss_streak = 0
                     else:
                         total_loss += pnl   # negative number
                         losses_count += 1
                         result_label = "LOSS"
+
+                        # Track loss streak
+                        if current_streak_type == "loss":
+                            loss_streak += 1
+                        else:
+                            loss_streak = 1
+                            current_streak_type = "loss"
+                        max_loss_streak = max(max_loss_streak, loss_streak)
+                        win_streak = 0
                     if capital > peak_capital:
                         peak_capital = capital
                     drawdown = (peak_capital - capital) / peak_capital * 100
@@ -268,6 +307,41 @@ def setup_routes(app: FastAPI, config: dict, start_time: datetime, runtime_state
                 })
 
             win_rate = (wins_count / total * 100) if total > 0 else 0
+
+            # Calculate advanced risk metrics
+            import numpy as np
+
+            # Sortino Ratio: Similar to Sharpe but only penalizes downside volatility
+            sortino_ratio = 0.0
+            if len(returns_list) > 1:
+                returns_arr = np.array(returns_list)
+                mean_return = np.mean(returns_arr)
+                downside_returns = returns_arr[returns_arr < 0]
+                if len(downside_returns) > 0:
+                    downside_std = np.std(downside_returns)
+                    if downside_std > 0:
+                        sortino_ratio = mean_return / downside_std
+
+            # Calmar Ratio: Annual return / Max Drawdown
+            calmar_ratio = 0.0
+            total_return_pct = ((capital - initial_capital) / initial_capital * 100) if initial_capital > 0 else 0
+            if max_drawdown > 0:
+                calmar_ratio = total_return_pct / max_drawdown
+
+            # Average win/loss
+            avg_win = (total_profit / wins_count) if wins_count > 0 else 0
+            avg_loss = abs(total_loss / losses_count) if losses_count > 0 else 0
+            profit_factor = (total_profit / abs(total_loss)) if total_loss != 0 else 0
+
+            # Buy-and-hold benchmark
+            buy_hold_return = 0.0
+            buy_hold_final_capital = initial_capital
+            if candles_list and len(candles_list) > 1:
+                first_price = candles_list[0]['close']
+                last_price = candles_list[-1]['close']
+                buy_hold_return = ((last_price - first_price) / first_price) * 100
+                buy_hold_final_capital = initial_capital * (1 + buy_hold_return / 100)
+
             stats = {
                 "totalTrades":   total,
                 "wins":          wins_count,
@@ -284,6 +358,19 @@ def setup_routes(app: FastAPI, config: dict, start_time: datetime, runtime_state
                 "maxDrawdown":   round(max_drawdown, 2),
                 "finalCapital":  round(capital, 2),
                 "initialCapital": initial_capital,
+                "equityCurve":   equity_curve,
+                # Advanced risk metrics
+                "sortinoRatio":  round(sortino_ratio, 2),
+                "calmarRatio":   round(calmar_ratio, 2),
+                "maxWinStreak":  max_win_streak,
+                "maxLossStreak": max_loss_streak,
+                "avgWin":        round(avg_win, 2),
+                "avgLoss":       round(avg_loss, 2),
+                "profitFactor":  round(profit_factor, 2),
+                # Buy-and-hold benchmark
+                "buyHoldReturn": round(buy_hold_return, 2),
+                "buyHoldFinal":  round(buy_hold_final_capital, 2),
+                "vsHoldPct":     round(total_return_pct - buy_hold_return, 2),
             }
 
             return {"candles": candles_list, "signals": signals, "stats": stats, "trades": trade_rows}

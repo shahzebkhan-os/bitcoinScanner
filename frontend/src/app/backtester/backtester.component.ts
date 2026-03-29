@@ -40,6 +40,19 @@ interface BacktestStats {
   maxDrawdown: number;
   finalCapital: number;
   initialCapital: number;
+  equityCurve?: Array<{ timestamp: string; capital: number }>;
+  // Advanced risk metrics
+  sortinoRatio?: number;
+  calmarRatio?: number;
+  maxWinStreak?: number;
+  maxLossStreak?: number;
+  avgWin?: number;
+  avgLoss?: number;
+  profitFactor?: number;
+  // Buy-and-hold benchmark
+  buyHoldReturn?: number;
+  buyHoldFinal?: number;
+  vsHoldPct?: number;
 }
 
 interface TradeRow {
@@ -62,9 +75,12 @@ interface TradeRow {
 })
 export class BacktesterComponent implements OnInit, OnDestroy {
   @ViewChild('btChartContainer', { static: true }) chartContainer!: ElementRef;
+  @ViewChild('equityChartContainer', { static: false }) equityChartContainer?: ElementRef;
 
   private chart!: IChartApi;
   private candleSeries!: ISeriesApi<'Candlestick'>;
+  private equityChart?: IChartApi;
+  private equitySeries?: ISeriesApi<'Area'>;
 
   readonly API_URL = 'http://localhost:8765';
 
@@ -93,6 +109,10 @@ export class BacktesterComponent implements OnInit, OnDestroy {
 
   stats: BacktestStats | null = null;
   trades: TradeRow[] = [];
+  allTrades: TradeRow[] = [];  // Store all trades
+  currentPage = 1;
+  tradesPerPage = 100;
+  totalPages = 1;
   isLoading = false;
   errorMessage = '';
 
@@ -118,12 +138,12 @@ export class BacktesterComponent implements OnInit, OnDestroy {
       this.chart.applyOptions({ width: this.chartContainer.nativeElement.clientWidth });
     });
     ro.observe(this.chartContainer.nativeElement);
-    // Run an initial backtest immediately
-    this.runBacktest();
+    // Note: Don't auto-run on init - let user configure first and click "Run Backtest"
   }
 
   ngOnDestroy(): void {
     this.chart?.remove();
+    this.equityChart?.remove();
   }
 
   async runBacktest(): Promise<void> {
@@ -177,7 +197,13 @@ export class BacktesterComponent implements OnInit, OnDestroy {
 
       // Update stats & trades
       this.stats  = data.stats  || null;
-      this.trades = (data.trades || []).slice(0, 500); // Show up to 500 rows
+      this.allTrades = data.trades || [];
+      this.totalPages = Math.ceil(this.allTrades.length / this.tradesPerPage);
+      this.currentPage = 1;
+      this.updateDisplayedTrades();
+
+      // Render equity curve if data available
+      this.renderEquityCurve(data.stats?.equityCurve);
 
     } catch (err: any) {
       this.errorMessage = err?.message || 'Backtest failed';
@@ -249,5 +275,129 @@ export class BacktesterComponent implements OnInit, OnDestroy {
 
   getPnlClass(val: number): string {
     return val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral';
+  }
+
+  updateDisplayedTrades(): void {
+    const start = (this.currentPage - 1) * this.tradesPerPage;
+    const end = start + this.tradesPerPage;
+    this.trades = this.allTrades.slice(start, end);
+  }
+
+  nextPage(): void {
+    if (this.currentPage < this.totalPages) {
+      this.currentPage++;
+      this.updateDisplayedTrades();
+    }
+  }
+
+  prevPage(): void {
+    if (this.currentPage > 1) {
+      this.currentPage--;
+      this.updateDisplayedTrades();
+    }
+  }
+
+  goToPage(page: number): void {
+    if (page >= 1 && page <= this.totalPages) {
+      this.currentPage = page;
+      this.updateDisplayedTrades();
+    }
+  }
+
+  get pageNumbers(): number[] {
+    const pages: number[] = [];
+    const maxPagesToShow = 5;
+    let start = Math.max(1, this.currentPage - Math.floor(maxPagesToShow / 2));
+    let end = Math.min(this.totalPages, start + maxPagesToShow - 1);
+
+    if (end - start + 1 < maxPagesToShow) {
+      start = Math.max(1, end - maxPagesToShow + 1);
+    }
+
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    return pages;
+  }
+
+  exportToCSV(): void {
+    if (!this.allTrades || this.allTrades.length === 0) {
+      alert('No trades to export');
+      return;
+    }
+
+    // Create CSV header
+    const headers = ['Timestamp', 'Direction', 'Entry Price', 'Exit Price', 'Exit Type', 'P&L', 'Result', 'Votes'];
+
+    // Create CSV rows - export ALL trades, not just current page
+    const rows = this.allTrades.map(trade => [
+      trade.timestamp,
+      trade.direction,
+      trade.entry.toString(),
+      trade.exit.toString(),
+      trade.exitType,
+      trade.pnl.toString(),
+      trade.result,
+      trade.votes
+    ]);
+
+    // Combine headers and rows
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', `backtest_results_${new Date().getTime()}.csv`);
+    link.style.visibility = 'hidden';
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  private renderEquityCurve(equityCurve?: Array<{ timestamp: string; capital: number }>): void {
+    if (!equityCurve || equityCurve.length === 0 || !this.equityChartContainer) {
+      return;
+    }
+
+    // Initialize equity chart if not already created
+    if (!this.equityChart) {
+      this.equityChart = createChart(this.equityChartContainer.nativeElement, {
+        layout:     { background: { color: '#0d0f17' }, textColor: '#9498b0' },
+        grid:       { vertLines: { color: '#1a1d2e' }, horzLines: { color: '#1a1d2e' } },
+        crosshair:  { mode: 1 },
+        rightPriceScale: { borderColor: '#1e2130' },
+        timeScale:  { borderColor: '#1e2130', timeVisible: true },
+        width:  this.equityChartContainer.nativeElement.clientWidth,
+        height: 200,
+      });
+      this.equitySeries = this.equityChart.addAreaSeries({
+        topColor: 'rgba(0, 212, 163, 0.56)',
+        bottomColor: 'rgba(0, 212, 163, 0.04)',
+        lineColor: '#00d4a3',
+        lineWidth: 2,
+      });
+
+      // Auto-resize
+      const ro = new ResizeObserver(() => {
+        this.equityChart?.applyOptions({ width: this.equityChartContainer!.nativeElement.clientWidth });
+      });
+      ro.observe(this.equityChartContainer.nativeElement);
+    }
+
+    // Convert equity curve data to chart format
+    const equityData = equityCurve.map(point => ({
+      time: Math.floor(new Date(point.timestamp).getTime() / 1000) as any,
+      value: point.capital,
+    })).sort((a, b) => (a.time as number) - (b.time as number));
+
+    this.equitySeries?.setData(equityData);
+    this.equityChart?.timeScale().fitContent();
   }
 }

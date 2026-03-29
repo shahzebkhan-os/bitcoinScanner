@@ -198,6 +198,77 @@
       </div>
     </div>
 
+    <!-- Advanced Risk Metrics Section -->
+    <div class="metrics-section" *ngIf="stats">
+      <div class="metrics-header">
+        <h3>📊 Advanced Metrics & Benchmark</h3>
+      </div>
+      <div class="metrics-grid">
+        <!-- Risk Metrics -->
+        <div class="metric-card">
+          <div class="metric-label">Sortino Ratio</div>
+          <div class="metric-value" [class.positive]="stats.sortinoRatio && stats.sortinoRatio > 1">
+            {{ stats.sortinoRatio || 0 | number:'1.2-2' }}
+          </div>
+          <div class="metric-desc">Higher = Better risk-adj. return</div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-label">Calmar Ratio</div>
+          <div class="metric-value" [class.positive]="stats.calmarRatio && stats.calmarRatio > 1">
+            {{ stats.calmarRatio || 0 | number:'1.2-2' }}
+          </div>
+          <div class="metric-desc">Return / Max Drawdown</div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-label">Profit Factor</div>
+          <div class="metric-value" [class.positive]="stats.profitFactor && stats.profitFactor > 1">
+            {{ stats.profitFactor || 0 | number:'1.2-2' }}
+          </div>
+          <div class="metric-desc">Gross Profit / Gross Loss</div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-label">Avg Win / Avg Loss</div>
+          <div class="metric-value">
+            ${{ stats.avgWin || 0 | number:'1.2-2' }} / ${{ stats.avgLoss || 0 | number:'1.2-2' }}
+          </div>
+          <div class="metric-desc">{{ stats.avgWin && stats.avgLoss && stats.avgLoss > 0 ? ((stats.avgWin / stats.avgLoss) | number:'1.2-2') + ':1' : 'N/A' }}</div>
+        </div>
+
+        <!-- Streaks -->
+        <div class="metric-card">
+          <div class="metric-label">Max Win Streak</div>
+          <div class="metric-value positive">{{ stats.maxWinStreak || 0 }}</div>
+          <div class="metric-desc">Consecutive wins</div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-label">Max Loss Streak</div>
+          <div class="metric-value negative">{{ stats.maxLossStreak || 0 }}</div>
+          <div class="metric-desc">Consecutive losses</div>
+        </div>
+
+        <!-- Benchmark -->
+        <div class="metric-card benchmark">
+          <div class="metric-label">Buy & Hold Return</div>
+          <div class="metric-value" [class.positive]="stats.buyHoldReturn && stats.buyHoldReturn > 0" [class.negative]="stats.buyHoldReturn && stats.buyHoldReturn < 0">
+            {{ stats.buyHoldReturn || 0 | number:'1.2-2' }}%
+          </div>
+          <div class="metric-desc">Passive strategy</div>
+        </div>
+
+        <div class="metric-card benchmark highlight">
+          <div class="metric-label">Strategy vs Buy & Hold</div>
+          <div class="metric-value" [class.positive]="stats.vsHoldPct && stats.vsHoldPct > 0" [class.negative]="stats.vsHoldPct && stats.vsHoldPct < 0">
+            {{ stats.vsHoldPct && stats.vsHoldPct > 0 ? '+' : '' }}{{ stats.vsHoldPct || 0 | number:'1.2-2' }}%
+          </div>
+          <div class="metric-desc">{{ stats.vsHoldPct && stats.vsHoldPct > 0 ? 'Outperforming' : stats.vsHoldPct && stats.vsHoldPct < 0 ? 'Underperforming' : 'Equal' }}</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Chart Section (Fixed height) -->
     <div class="chart-section">
       <div class="chart-legend">
@@ -209,10 +280,25 @@
       <div #btChartContainer class="bt-chart"></div>
     </div>
 
+    <!-- Equity Curve Section -->
+    <div class="equity-section" *ngIf="stats?.equityCurve && stats.equityCurve.length > 0">
+      <div class="equity-header">
+        <h3>📈 Equity Curve</h3>
+        <span class="equity-stats">
+          Start: ${{ stats.initialCapital | number:'1.0-0' }} → End: ${{ stats.finalCapital | number:'1.0-0' }}
+          ({{ ((stats.finalCapital - stats.initialCapital) / stats.initialCapital * 100) | number:'1.1-1' }}%)
+        </span>
+      </div>
+      <div #equityChartContainer class="equity-chart"></div>
+    </div>
+
     <!-- Trades Section (Takes remaining space, scrolls internally) -->
-    <div class="trades-section" *ngIf="trades.length > 0">
+    <div class="trades-section" *ngIf="allTrades.length > 0">
       <div class="trades-header">
-        <h3>Trade Log <span class="badge">{{ trades.length }}</span></h3>
+        <h3>Trade Log <span class="badge">{{ allTrades.length }}</span></h3>
+        <button class="export-btn" (click)="exportToCSV()" title="Export to CSV">
+          📥 Export CSV
+        </button>
       </div>
       <div class="table-wrapper">
         <table>
@@ -242,12 +328,53 @@
           </tbody>
         </table>
       </div>
+
+      <!-- Pagination Controls -->
+      <div class="pagination" *ngIf="totalPages > 1">
+        <button class="page-btn" (click)="prevPage()" [disabled]="currentPage === 1">
+          ◀ Prev
+        </button>
+
+        <button *ngIf="pageNumbers[0] > 1" class="page-btn" (click)="goToPage(1)">
+          1
+        </button>
+        <span *ngIf="pageNumbers[0] > 2" class="page-dots">...</span>
+
+        <button
+          *ngFor="let page of pageNumbers"
+          class="page-btn"
+          [class.active]="page === currentPage"
+          (click)="goToPage(page)">
+          {{ page }}
+        </button>
+
+        <span *ngIf="pageNumbers[pageNumbers.length - 1] < totalPages - 1" class="page-dots">...</span>
+        <button *ngIf="pageNumbers[pageNumbers.length - 1] < totalPages" class="page-btn" (click)="goToPage(totalPages)">
+          {{ totalPages }}
+        </button>
+
+        <button class="page-btn" (click)="nextPage()" [disabled]="currentPage === totalPages">
+          Next ▶
+        </button>
+
+        <span class="page-info">Page {{ currentPage }} of {{ totalPages }} ({{ allTrades.length }} total trades)</span>
+      </div>
     </div>
 
     <!-- Loading state -->
     <div class="loading-overlay" *ngIf="isLoading">
-      <div class="spinner">⌛</div>
-      <span>Running backtest...</span>
+      <div class="spinner-large">⌛</div>
+      <div class="loading-text">
+        <span class="loading-title">Running backtest...</span>
+        <span class="loading-subtitle">Analyzing {{ params.limit }} candles with {{ params.interval }} timeframe</span>
+      </div>
+    </div>
+
+    <!-- Empty state when no results yet -->
+    <div class="empty-state" *ngIf="!isLoading && !stats">
+      <div class="empty-icon">📊</div>
+      <h3>No backtest results yet</h3>
+      <p>Configure your strategy parameters in the sidebar and click "Run Backtest" to begin.</p>
     </div>
 
   </main>
