@@ -22,6 +22,7 @@ from scanner.backtester import run_backtest, run_custom_strategy_backtest, STRAT
 logger = logging.getLogger(__name__)
 DEFAULT_STOP_LOSS_PCT = 0.002
 CUSTOM_STRATEGY_NAMES = list(STRATEGY_TO_COLUMN.keys())
+DRAWDOWN_PENALTY_MULTIPLIER = 5.0
 
 
 def _snake_to_camel(key: str) -> str:
@@ -407,7 +408,9 @@ def setup_routes(app: FastAPI, config: dict, start_time: datetime, runtime_state
                 candles_list = _build_candles_list(df)
                 stats, _ = _compute_backtest_stats(signals, candles_list, run_body)
 
-                score = float(stats.get("finalCapital", 0.0)) - (float(stats.get("maxDrawdown", 0.0)) * 5.0)
+                score = float(stats.get("finalCapital", 0.0)) - (
+                    float(stats.get("maxDrawdown", 0.0)) * DRAWDOWN_PENALTY_MULTIPLIER
+                )
                 results.append({
                     "params": params_used,
                     "score": round(score, 2),

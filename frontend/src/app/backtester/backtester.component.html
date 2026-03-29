@@ -433,7 +433,7 @@
           <tbody>
             <tr *ngFor="let r of gridSearchResults; let i = index">
               <td>{{ i + 1 }}</td>
-              <td>{{ r.params | json }}</td>
+              <td>{{ formatParams(r.params) }}</td>
               <td>{{ r.score | number:'1.2-2' }}</td>
               <td>${{ r.stats.finalCapital | number:'1.0-0' }}</td>
               <td>{{ r.stats.maxDrawdown | number:'1.2-2' }}%</td>

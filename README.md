@@ -140,6 +140,11 @@ Signals fire only when **3 or more strategies agree** on the same direction (LON
 - `GET /config`: Current configuration (sanitized)
 - `GET /signals/history?limit=50`: Last N signals from CSV log
 - `GET /health`: Server health and uptime
+- `POST /backtest`: Parameterized backtest
+- `POST /backtest/grid-search`: Multi-parameter optimization across parameter grid
+- `POST /backtest/walk-forward`: In-sample/out-of-sample validation windows
+- `POST /backtest/monte-carlo`: Monte Carlo trade order randomization simulation
+- `POST /backtest/custom-strategy`: Custom strategy builder using selected built-in strategies
 
 ## Configuration (`config.yaml`)
 

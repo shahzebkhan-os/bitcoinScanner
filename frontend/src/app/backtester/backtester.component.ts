@@ -137,6 +137,12 @@ export class BacktesterComponent implements OnInit, OnDestroy {
 
   private candleTimes: number[] = [];
 
+  formatParams(params: Record<string, number>): string {
+    return Object.entries(params)
+      .map(([key, value]) => `${key}: ${value}`)
+      .join(', ');
+  }
+
   ngOnInit(): void {
     this.chart = createChart(this.chartContainer.nativeElement, {
       layout:     { background: { color: '#0d0f17' }, textColor: '#9498b0' },
@@ -325,10 +331,11 @@ export class BacktesterComponent implements OnInit, OnDestroy {
       const selectedStrategies = Object.entries(this.customStrategySelected)
         .filter(([, checked]) => checked)
         .map(([name]) => name);
+      const customMinVotes = Math.max(1, Math.floor(selectedStrategies.length / 2));
       const body = {
         ...this.buildBaseBody(),
         selectedStrategies,
-        customMinVotes: Math.max(1, Math.min(2, selectedStrategies.length)),
+        customMinVotes,
         customMinExitVotes: 1,
       };
       const resp = await fetch(`${this.API_URL}/backtest/custom-strategy`, {

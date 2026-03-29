@@ -181,7 +181,7 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
         entry_votes_str = ""
         entry_agreeing  = []
 
-        def make_iso(ts):
+        def to_iso_string(ts):
             return ts.isoformat() if hasattr(ts, 'isoformat') else str(ts)
 
         for idx in range(len(data)):
@@ -206,7 +206,7 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
             # ── Check for exit / reversal ─────────────────────────────────────
             if position == "LONG" and sv >= min_exit_votes:
                 # Exit the LONG
-                signals[-1]['exitTimestamp'] = make_iso(ts)
+                signals[-1]['exitTimestamp'] = to_iso_string(ts)
                 signals[-1]['exitPrice']     = close
                 signals[-1]['exitType']      = 'signal'
                 position = None
@@ -214,7 +214,7 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
                 # Immediately try to enter SHORT on this same candle (if filters pass)
                 if sv >= min_votes and short_ok:
                     agreeing = get_agreeing(votes.iloc[idx], "SHORT")
-                    iso_ts   = make_iso(ts)
+                    iso_ts   = to_iso_string(ts)
                     signals.append({
                         "timestamp":       iso_ts,
                         "direction":       "SHORT",
@@ -238,7 +238,7 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
 
             elif position == "SHORT" and lv >= min_exit_votes:
                 # Exit the SHORT
-                signals[-1]['exitTimestamp'] = make_iso(ts)
+                signals[-1]['exitTimestamp'] = to_iso_string(ts)
                 signals[-1]['exitPrice']     = close
                 signals[-1]['exitType']      = 'signal'
                 position = None
@@ -246,7 +246,7 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
                 # Immediately try to enter LONG on this same candle (if filters pass)
                 if lv >= min_votes and long_ok:
                     agreeing = get_agreeing(votes.iloc[idx], "LONG")
-                    iso_ts   = make_iso(ts)
+                    iso_ts   = to_iso_string(ts)
                     signals.append({
                         "timestamp":       iso_ts,
                         "direction":       "LONG",
@@ -278,7 +278,7 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
                     continue  # flat and no valid signal
 
                 agreeing = get_agreeing(votes.iloc[idx], direction)
-                iso_ts   = make_iso(ts)
+                iso_ts   = to_iso_string(ts)
                 signals.append({
                     "timestamp":       iso_ts,
                     "direction":       direction,
@@ -437,7 +437,7 @@ def run_custom_strategy_backtest(
                     names.append(reverse_map[column])
             return names
 
-        def make_iso(ts):
+        def to_iso_string(ts):
             return ts.isoformat() if hasattr(ts, 'isoformat') else str(ts)
 
         signals: List[Dict[str, Any]] = []
@@ -451,13 +451,13 @@ def run_custom_strategy_backtest(
             ts = row['time']
 
             if position == "LONG" and sv >= exit_votes:
-                signals[-1]['exitTimestamp'] = make_iso(ts)
+                signals[-1]['exitTimestamp'] = to_iso_string(ts)
                 signals[-1]['exitPrice'] = close
                 signals[-1]['exitType'] = 'signal'
                 position = None
                 if sv >= min_votes:
                     agreeing = get_agreeing(idx, "SHORT")
-                    iso_ts = make_iso(ts)
+                    iso_ts = to_iso_string(ts)
                     signals.append({
                         "timestamp": iso_ts,
                         "direction": "SHORT",
@@ -480,13 +480,13 @@ def run_custom_strategy_backtest(
                 continue
 
             if position == "SHORT" and lv >= exit_votes:
-                signals[-1]['exitTimestamp'] = make_iso(ts)
+                signals[-1]['exitTimestamp'] = to_iso_string(ts)
                 signals[-1]['exitPrice'] = close
                 signals[-1]['exitType'] = 'signal'
                 position = None
                 if lv >= min_votes:
                     agreeing = get_agreeing(idx, "LONG")
-                    iso_ts = make_iso(ts)
+                    iso_ts = to_iso_string(ts)
                     signals.append({
                         "timestamp": iso_ts,
                         "direction": "LONG",
@@ -518,7 +518,7 @@ def run_custom_strategy_backtest(
                 else:
                     continue
                 agreeing = get_agreeing(idx, direction)
-                iso_ts = make_iso(ts)
+                iso_ts = to_iso_string(ts)
                 signals.append({
                     "timestamp": iso_ts,
                     "direction": direction,
