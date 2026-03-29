@@ -239,20 +239,13 @@ The log shows a detailed row-by-row breakdown of every trade, including the **Co
 
 The following features are planned for future releases:
 
-- [x] **Multi-parameter grid search**: Run 100+ backtests automatically and compare results ✅ IMPLEMENTED
-- [x] **Walk-forward optimization**: Test on in-sample data, validate on out-of-sample ✅ IMPLEMENTED
-- [x] **Monte Carlo simulation**: Randomize trade order to test robustness ✅ IMPLEMENTED
+- [ ] **Multi-parameter grid search**: Run 100+ backtests automatically and compare results
+- [ ] **Walk-forward optimization**: Test on in-sample data, validate on out-of-sample
+- [ ] **Monte Carlo simulation**: Randomize trade order to test robustness (implementation in progress)
 - [x] **Benchmark comparison**: Compare strategy vs. buy-and-hold ✅ IMPLEMENTED
 - [x] **Risk metrics**: Sortino ratio, Calmar ratio, win/loss streaks ✅ IMPLEMENTED
 - [x] **Trade pagination**: Handle 1000+ trades with infinite scroll ✅ IMPLEMENTED
-- [x] **Custom strategy builder**: Create your own indicator combinations in the UI ✅ IMPLEMENTED
-
-### New Optimization Endpoints
-
-- `POST /backtest/grid-search` — evaluates parameter combinations and returns ranked top results
-- `POST /backtest/walk-forward` — runs in-sample/out-of-sample windows and reports stability
-- `POST /backtest/monte-carlo` — randomizes trade return order across iterations
-- `POST /backtest/custom-strategy` — backtests user-selected subset of built-in strategies
+- [ ] **Custom strategy builder**: Create your own indicator combinations in the UI
 
 ---
 
@@ -287,3 +280,4 @@ The following features are planned for future releases:
 ---
 
 **For additional help, please refer to the main [README.md](README.md) or open an issue on GitHub.**
+

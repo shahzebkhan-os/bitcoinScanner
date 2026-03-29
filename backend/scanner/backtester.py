@@ -8,18 +8,9 @@ Replicates the logic from strategies.py and indicators.py using pandas for effic
 import pandas as pd
 import numpy as np
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
 logger = logging.getLogger(__name__)
-
-STRATEGY_TO_COLUMN = {
-    "EMAcrossoverStrategy": "s1",
-    "RSIBollingerStrategy": "s2",
-    "VWAPBounceStrategy": "s3",
-    "RangeTradingStrategy": "s4",
-    "BreakoutStrategy": "s5",
-    "MACDMomentumStrategy": "s6",
-}
 
 
 def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
@@ -181,7 +172,7 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
         entry_votes_str = ""
         entry_agreeing  = []
 
-        def to_iso_string(ts):
+        def make_iso(ts):
             return ts.isoformat() if hasattr(ts, 'isoformat') else str(ts)
 
         for idx in range(len(data)):
@@ -206,7 +197,7 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
             # ── Check for exit / reversal ─────────────────────────────────────
             if position == "LONG" and sv >= min_exit_votes:
                 # Exit the LONG
-                signals[-1]['exitTimestamp'] = to_iso_string(ts)
+                signals[-1]['exitTimestamp'] = make_iso(ts)
                 signals[-1]['exitPrice']     = close
                 signals[-1]['exitType']      = 'signal'
                 position = None
@@ -214,7 +205,7 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
                 # Immediately try to enter SHORT on this same candle (if filters pass)
                 if sv >= min_votes and short_ok:
                     agreeing = get_agreeing(votes.iloc[idx], "SHORT")
-                    iso_ts   = to_iso_string(ts)
+                    iso_ts   = make_iso(ts)
                     signals.append({
                         "timestamp":       iso_ts,
                         "direction":       "SHORT",
@@ -238,7 +229,7 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
 
             elif position == "SHORT" and lv >= min_exit_votes:
                 # Exit the SHORT
-                signals[-1]['exitTimestamp'] = to_iso_string(ts)
+                signals[-1]['exitTimestamp'] = make_iso(ts)
                 signals[-1]['exitPrice']     = close
                 signals[-1]['exitType']      = 'signal'
                 position = None
@@ -246,7 +237,7 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
                 # Immediately try to enter LONG on this same candle (if filters pass)
                 if lv >= min_votes and long_ok:
                     agreeing = get_agreeing(votes.iloc[idx], "LONG")
-                    iso_ts   = to_iso_string(ts)
+                    iso_ts   = make_iso(ts)
                     signals.append({
                         "timestamp":       iso_ts,
                         "direction":       "LONG",
@@ -278,7 +269,7 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
                     continue  # flat and no valid signal
 
                 agreeing = get_agreeing(votes.iloc[idx], direction)
-                iso_ts   = to_iso_string(ts)
+                iso_ts   = make_iso(ts)
                 signals.append({
                     "timestamp":       iso_ts,
                     "direction":       direction,
@@ -305,241 +296,4 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
 
     except Exception as e:
         logger.error(f"Backtester error: {e}", exc_info=True)
-        return []
-
-
-def _build_strategy_vote_frame(df: pd.DataFrame, config: dict) -> pd.DataFrame:
-    """Build indicator and strategy vote frame used by custom strategy builder."""
-    data = df.copy().reset_index(drop=True)
-
-    ind_cfg = config.get('indicators', {})
-    ema_fast_p = ind_cfg.get('ema_fast', 9)
-    ema_slow_p = ind_cfg.get('ema_slow', 21)
-    rsi_p = ind_cfg.get('rsi_period', 14)
-    macd_f = ind_cfg.get('macd_fast', 12)
-    macd_s = ind_cfg.get('macd_slow', 26)
-    macd_sig = ind_cfg.get('macd_signal', 9)
-    bb_p = ind_cfg.get('bb_period', 20)
-    bb_std_mult = ind_cfg.get('bb_std', 2)
-
-    data['ema_fast'] = data['close'].ewm(span=ema_fast_p, adjust=False).mean()
-    data['ema_slow'] = data['close'].ewm(span=ema_slow_p, adjust=False).mean()
-
-    delta = data['close'].diff()
-    gain = delta.where(delta > 0, 0.0).rolling(window=rsi_p).mean()
-    loss = (-delta.where(delta < 0, 0.0)).rolling(window=rsi_p).mean()
-    data['rsi'] = 100 - (100 / (1 + (gain / loss.replace(0, np.nan)))).fillna(50)
-
-    ema_f_macd = data['close'].ewm(span=macd_f, adjust=False).mean()
-    ema_s_macd = data['close'].ewm(span=macd_s, adjust=False).mean()
-    data['macd_line'] = ema_f_macd - ema_s_macd
-    data['macd_signal'] = data['macd_line'].ewm(span=macd_sig, adjust=False).mean()
-    data['macd_hist'] = data['macd_line'] - data['macd_signal']
-
-    data['bb_mid'] = data['close'].rolling(window=bb_p).mean()
-    bb_std = data['close'].rolling(window=bb_p).std()
-    data['bb_up'] = data['bb_mid'] + (bb_std * bb_std_mult)
-    data['bb_lo'] = data['bb_mid'] - (bb_std * bb_std_mult)
-
-    typical_price = (data['high'] + data['low'] + data['close']) / 3
-    if pd.api.types.is_datetime64_any_dtype(data['time']):
-        data['_day'] = data['time'].dt.date
-    else:
-        data['_day'] = pd.to_datetime(data['time'], utc=True).dt.date
-    data['_cum_pv'] = (typical_price * data['volume']).groupby(data['_day']).cumsum()
-    data['_cum_vol'] = data['volume'].groupby(data['_day']).cumsum()
-    data['vwap'] = data['_cum_pv'] / data['_cum_vol'].replace(0, np.nan)
-    data['vwap'] = data['vwap'].ffill().fillna(data['close'])
-
-    data['vol_avg'] = data['volume'].rolling(window=20).mean()
-    data['vol_ratio'] = (data['volume'] / data['vol_avg'].replace(0, np.nan)).fillna(1.0)
-
-    data['roll_high'] = data['high'].rolling(window=20).max()
-    data['roll_lo'] = data['low'].rolling(window=20).min()
-    data['range_pct'] = ((data['roll_high'] - data['roll_lo']) / data['roll_lo'].replace(0, np.nan)) * 100
-
-    s1 = pd.Series(0, index=data.index)
-    s1[data['ema_fast'] > data['ema_slow']] = 1
-    s1[data['ema_fast'] < data['ema_slow']] = -1
-
-    s2 = pd.Series(0, index=data.index)
-    s2[(data['rsi'] < 30) & (data['close'] < data['bb_lo'])] = 1
-    s2[(data['rsi'] > 70) & (data['close'] > data['bb_up'])] = -1
-
-    s3 = pd.Series(0, index=data.index)
-    s3[(data['close'] > data['vwap']) & (data['vol_ratio'] > 1.2)] = 1
-    s3[(data['close'] < data['vwap']) & (data['vol_ratio'] > 1.2)] = -1
-
-    s4 = pd.Series(0, index=data.index)
-    ranging = data['range_pct'] <= 1.5
-    near_lo = (data['close'] - data['roll_lo']).abs() / data['roll_lo'].replace(0, np.nan) < 0.001
-    near_hi = (data['close'] - data['roll_high']).abs() / data['roll_high'].replace(0, np.nan) < 0.001
-    s4[ranging & near_lo & (data['rsi'] < 45)] = 1
-    s4[ranging & near_hi & (data['rsi'] > 55)] = -1
-
-    s5 = pd.Series(0, index=data.index)
-    s5[(data['close'] > data['roll_high'] * 1.002) & (data['vol_ratio'] > 1.5)] = 1
-    s5[(data['close'] < data['roll_lo'] * 0.998) & (data['vol_ratio'] > 1.5)] = -1
-
-    s6 = pd.Series(0, index=data.index)
-    s6[data['macd_hist'] > 0] = 1
-    s6[data['macd_hist'] < 0] = -1
-
-    data['s1'] = s1
-    data['s2'] = s2
-    data['s3'] = s3
-    data['s4'] = s4
-    data['s5'] = s5
-    data['s6'] = s6
-    return data
-
-
-def run_custom_strategy_backtest(
-    df: pd.DataFrame,
-    config: dict,
-    selected_strategies: List[str],
-    min_votes: int = 2,
-    min_exit_votes: Optional[int] = None,
-) -> List[Dict[str, Any]]:
-    """
-    Build a custom strategy by combining selected built-in strategies with custom vote thresholds.
-    """
-    if df.empty or len(df) < 50:
-        return []
-
-    strategy_columns = [
-        STRATEGY_TO_COLUMN[name]
-        for name in selected_strategies
-        if name in STRATEGY_TO_COLUMN
-    ]
-    if not strategy_columns:
-        return []
-
-    total_selected = len(strategy_columns)
-    min_votes = max(1, min(min_votes, total_selected))
-    exit_votes = min_exit_votes if min_exit_votes is not None else max(1, min_votes - 1)
-    exit_votes = max(1, min(exit_votes, total_selected))
-
-    try:
-        data = _build_strategy_vote_frame(df, config)
-        votes = data[strategy_columns]
-        data['long_votes'] = (votes == 1).sum(axis=1)
-        data['short_votes'] = (votes == -1).sum(axis=1)
-
-        reverse_map = {v: k for k, v in STRATEGY_TO_COLUMN.items()}
-
-        def get_agreeing(idx: int, direction: str) -> List[str]:
-            row = data.iloc[idx]
-            names: List[str] = []
-            for column in strategy_columns:
-                vote = int(row[column])
-                if (direction == "LONG" and vote == 1) or (direction == "SHORT" and vote == -1):
-                    names.append(reverse_map[column])
-            return names
-
-        def to_iso_string(ts):
-            return ts.isoformat() if hasattr(ts, 'isoformat') else str(ts)
-
-        signals: List[Dict[str, Any]] = []
-        position = None
-
-        for idx in range(len(data)):
-            row = data.iloc[idx]
-            lv = int(row['long_votes'])
-            sv = int(row['short_votes'])
-            close = float(row['close'])
-            ts = row['time']
-
-            if position == "LONG" and sv >= exit_votes:
-                signals[-1]['exitTimestamp'] = to_iso_string(ts)
-                signals[-1]['exitPrice'] = close
-                signals[-1]['exitType'] = 'signal'
-                position = None
-                if sv >= min_votes:
-                    agreeing = get_agreeing(idx, "SHORT")
-                    iso_ts = to_iso_string(ts)
-                    signals.append({
-                        "timestamp": iso_ts,
-                        "direction": "SHORT",
-                        "price": close,
-                        "votes": f"{sv}/{total_selected}",
-                        "strategies": "; ".join(agreeing),
-                        "avgStrength": round(len(agreeing) / total_selected, 2),
-                        "interval": "history",
-                        "entry": close,
-                        "stopLoss": None,
-                        "target": None,
-                        "targetRr": None,
-                        "entryTimestamp": iso_ts,
-                        "entryDirection": "SHORT",
-                        "exitTimestamp": None,
-                        "exitPrice": None,
-                        "exitType": "open",
-                    })
-                    position = "SHORT"
-                continue
-
-            if position == "SHORT" and lv >= exit_votes:
-                signals[-1]['exitTimestamp'] = to_iso_string(ts)
-                signals[-1]['exitPrice'] = close
-                signals[-1]['exitType'] = 'signal'
-                position = None
-                if lv >= min_votes:
-                    agreeing = get_agreeing(idx, "LONG")
-                    iso_ts = to_iso_string(ts)
-                    signals.append({
-                        "timestamp": iso_ts,
-                        "direction": "LONG",
-                        "price": close,
-                        "votes": f"{lv}/{total_selected}",
-                        "strategies": "; ".join(agreeing),
-                        "avgStrength": round(len(agreeing) / total_selected, 2),
-                        "interval": "history",
-                        "entry": close,
-                        "stopLoss": None,
-                        "target": None,
-                        "targetRr": None,
-                        "entryTimestamp": iso_ts,
-                        "entryDirection": "LONG",
-                        "exitTimestamp": None,
-                        "exitPrice": None,
-                        "exitType": "open",
-                    })
-                    position = "LONG"
-                continue
-
-            if position is None:
-                if lv >= min_votes:
-                    direction = "LONG"
-                    count = lv
-                elif sv >= min_votes:
-                    direction = "SHORT"
-                    count = sv
-                else:
-                    continue
-                agreeing = get_agreeing(idx, direction)
-                iso_ts = to_iso_string(ts)
-                signals.append({
-                    "timestamp": iso_ts,
-                    "direction": direction,
-                    "price": close,
-                    "votes": f"{count}/{total_selected}",
-                    "strategies": "; ".join(agreeing),
-                    "avgStrength": round(len(agreeing) / total_selected, 2),
-                    "interval": "history",
-                    "entry": close,
-                    "stopLoss": None,
-                    "target": None,
-                    "targetRr": None,
-                    "entryTimestamp": iso_ts,
-                    "entryDirection": direction,
-                    "exitTimestamp": None,
-                    "exitPrice": None,
-                    "exitType": "open",
-                })
-                position = direction
-
-        return signals
-    except Exception as e:
-        logger.error(f"Custom strategy backtester error: {e}", exc_info=True)
         return []
