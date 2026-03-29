@@ -66,6 +66,12 @@ interface TradeRow {
   votes: string;
 }
 
+interface GridSearchResult {
+  params: Record<string, number>;
+  score: number;
+  stats: BacktestStats;
+}
+
 @Component({
   selector: 'app-backtester',
   standalone: true,
@@ -115,6 +121,19 @@ export class BacktesterComponent implements OnInit, OnDestroy {
   totalPages = 1;
   isLoading = false;
   errorMessage = '';
+  enhancementError = '';
+  enhancementLoading = false;
+  gridSearchResults: GridSearchResult[] = [];
+  walkForwardSummary: any = null;
+  monteCarloSummary: any = null;
+  customStrategySelected = {
+    EMAcrossoverStrategy: true,
+    RSIBollingerStrategy: true,
+    VWAPBounceStrategy: true,
+    RangeTradingStrategy: false,
+    BreakoutStrategy: false,
+    MACDMomentumStrategy: true,
+  };
 
   private candleTimes: number[] = [];
 
@@ -146,6 +165,28 @@ export class BacktesterComponent implements OnInit, OnDestroy {
     this.equityChart?.remove();
   }
 
+  private buildBaseBody(): any {
+    return {
+      pair: this.params.pair,
+      interval: this.params.interval,
+      limit: this.params.limit,
+      minVotes: this.params.minVotes,
+      minExitVotes: this.params.minExitVotes,
+      rsiOversold: this.params.rsiOversold,
+      rsiOverbought: this.params.rsiOverbought,
+      emaFast: this.params.emaFast,
+      emaSlow: this.params.emaSlow,
+      initialCapital: this.params.initialCapital,
+      tradeAmount: this.params.tradeAmount,
+      tradeSizePct: this.params.tradeSizePct / 100,
+      useTrendFilter: this.params.useTrendFilter,
+      useVolumeFilter: this.params.useVolumeFilter,
+      volMultiplier: this.params.volMultiplier,
+      useHtfBias: this.params.useHtfBias,
+      htfEmaPeriod: this.params.htfEmaPeriod,
+    };
+  }
+
   async runBacktest(): Promise<void> {
     this.isLoading = true;
     this.errorMessage = '';
@@ -153,25 +194,7 @@ export class BacktesterComponent implements OnInit, OnDestroy {
     this.trades = [];
 
     try {
-      const body = {
-        pair:           this.params.pair,
-        interval:       this.params.interval,
-        limit:          this.params.limit,
-        minVotes:       this.params.minVotes,
-        minExitVotes:   this.params.minExitVotes,
-        rsiOversold:    this.params.rsiOversold,
-        rsiOverbought:  this.params.rsiOverbought,
-        emaFast:        this.params.emaFast,
-        emaSlow:        this.params.emaSlow,
-        initialCapital: this.params.initialCapital,
-        tradeAmount:    this.params.tradeAmount,
-        tradeSizePct:   this.params.tradeSizePct / 100,
-        useTrendFilter:  this.params.useTrendFilter,
-        useVolumeFilter: this.params.useVolumeFilter,
-        volMultiplier:   this.params.volMultiplier,
-        useHtfBias:      this.params.useHtfBias,
-        htfEmaPeriod:    this.params.htfEmaPeriod,
-      };
+      const body = this.buildBaseBody();
 
       const resp = await fetch(`${this.API_URL}/backtest`, {
         method:  'POST',
@@ -209,6 +232,122 @@ export class BacktesterComponent implements OnInit, OnDestroy {
       this.errorMessage = err?.message || 'Backtest failed';
     } finally {
       this.isLoading = false;
+    }
+  }
+
+  async runGridSearch(): Promise<void> {
+    this.enhancementLoading = true;
+    this.enhancementError = '';
+    try {
+      const body = {
+        ...this.buildBaseBody(),
+        maxRuns: 24,
+        topN: 8,
+        parameterGrid: {
+          minVotes: [2, 3, 4],
+          minExitVotes: [1, 2],
+          emaFast: [8, 9],
+          emaSlow: [21, 34],
+        },
+      };
+      const resp = await fetch(`${this.API_URL}/backtest/grid-search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      this.gridSearchResults = data.results || [];
+    } catch (err: any) {
+      this.enhancementError = err?.message || 'Grid search failed';
+    } finally {
+      this.enhancementLoading = false;
+    }
+  }
+
+  async runWalkForward(): Promise<void> {
+    this.enhancementLoading = true;
+    this.enhancementError = '';
+    try {
+      const body = {
+        ...this.buildBaseBody(),
+        trainSize: 1000,
+        testSize: 300,
+        stepSize: 300,
+        maxWindows: 8,
+      };
+      const resp = await fetch(`${this.API_URL}/backtest/walk-forward`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      this.walkForwardSummary = data.summary || null;
+    } catch (err: any) {
+      this.enhancementError = err?.message || 'Walk-forward failed';
+    } finally {
+      this.enhancementLoading = false;
+    }
+  }
+
+  async runMonteCarlo(): Promise<void> {
+    this.enhancementLoading = true;
+    this.enhancementError = '';
+    try {
+      const body = {
+        ...this.buildBaseBody(),
+        iterations: 100,
+        seed: 42,
+      };
+      const resp = await fetch(`${this.API_URL}/backtest/monte-carlo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      this.monteCarloSummary = data.summary || null;
+    } catch (err: any) {
+      this.enhancementError = err?.message || 'Monte Carlo failed';
+    } finally {
+      this.enhancementLoading = false;
+    }
+  }
+
+  async runCustomStrategyBacktest(): Promise<void> {
+    this.enhancementLoading = true;
+    this.enhancementError = '';
+    try {
+      const selectedStrategies = Object.entries(this.customStrategySelected)
+        .filter(([, checked]) => checked)
+        .map(([name]) => name);
+      const body = {
+        ...this.buildBaseBody(),
+        selectedStrategies,
+        customMinVotes: Math.max(1, Math.min(2, selectedStrategies.length)),
+        customMinExitVotes: 1,
+      };
+      const resp = await fetch(`${this.API_URL}/backtest/custom-strategy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      this.stats = data.stats || null;
+      this.allTrades = data.trades || [];
+      this.totalPages = Math.ceil(this.allTrades.length / this.tradesPerPage);
+      this.currentPage = 1;
+      this.updateDisplayedTrades();
+    } catch (err: any) {
+      this.enhancementError = err?.message || 'Custom strategy run failed';
+    } finally {
+      this.enhancementLoading = false;
     }
   }
 
