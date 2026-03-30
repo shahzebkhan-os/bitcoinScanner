@@ -34,6 +34,44 @@ indicators:
   bb_std: 2
   vwap_reset: "daily"
 
+# Signal accuracy filters — tune these to reduce false signals
+signal_filters:
+  # EMA crossover: minimum spread between EMA9 and EMA21 as a fraction of price.
+  # Crossovers with spread below this threshold are ignored (whipsaw protection).
+  # Default 0.0005 = 0.05% of price (e.g. $50 gap on $100k BTC).
+  min_ema_spread_pct: 0.0005
+
+  # RSI+Bollinger strategy: also require EMA fast/slow alignment.
+  # true  = only buy when EMA9 >= EMA21 (downtrend RSI dips are ignored).
+  # false = fire purely on RSI+BB conditions regardless of trend.
+  require_rsi_ema_alignment: true
+
+  # VWAP Bounce: require an actual VWAP crossover event (prev below, now above).
+  # true  = fire only on the cross candle (much rarer, higher quality).
+  # false = fire whenever price is on one side of VWAP with volume (legacy).
+  vwap_crossover_only: true
+
+  # Minimum volume ratio for VWAP Bounce strategy.
+  vwap_vol_threshold: 1.2
+
+  # Breakout strategy: minimum volume ratio to confirm a real breakout.
+  breakout_vol_threshold: 1.5
+
+  # MACD Momentum: RSI zone for LONG signals (inclusive).
+  # Avoids buying on MACD cross when RSI is already overbought.
+  macd_rsi_long_min: 40.0
+  macd_rsi_long_max: 68.0
+
+  # MACD Momentum: RSI zone for SHORT signals (inclusive).
+  # Avoids shorting on MACD cross when RSI is already oversold.
+  macd_rsi_short_min: 32.0
+  macd_rsi_short_max: 60.0
+
+  # Consensus: strategies with strength below this value do not count as votes.
+  # 0.0 = all votes count regardless of strength (default, backward-compatible).
+  # 0.3 = weak/uncertain strategy votes are discarded before counting.
+  min_signal_strength: 0.0
+
 risk:
   max_leverage: 5
   risk_per_trade_pct: 1.0

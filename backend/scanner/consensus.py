@@ -50,15 +50,26 @@ def evaluate_consensus(results: List[SignalResult], config: dict) -> ConsensusRe
 
     Returns:
         ConsensusResult with vote counts and final direction
+
+    Accuracy improvements:
+    - Optional min_signal_strength filter: strategies with strength below the
+      threshold do not count towards the vote (avoids weak/uncertain votes
+      inflating consensus counts).
+    - LONG takes priority only when it meets the threshold; ties are NEUTRAL.
     """
     try:
-        # Count votes
-        long_votes = sum(1 for r in results if r.direction == "LONG")
-        short_votes = sum(1 for r in results if r.direction == "SHORT")
-        neutral_votes = sum(1 for r in results if r.direction == "NEUTRAL")
-
-        # Get min_votes threshold
+        # Get min_votes threshold and optional strength filter
         min_votes = config.get('min_votes', 3)
+        filters = config.get('signal_filters', {})
+        min_strength = float(filters.get('min_signal_strength', 0.0))
+
+        # Count votes, optionally filtering by minimum strength
+        long_results = [r for r in results if r.direction == "LONG" and r.strength >= min_strength]
+        short_results = [r for r in results if r.direction == "SHORT" and r.strength >= min_strength]
+        # Neutral includes both genuine neutrals and votes filtered out by strength threshold
+        long_votes = len(long_results)
+        short_votes = len(short_results)
+        neutral_votes = len(results) - long_votes - short_votes
 
         # Determine consensus direction
         fired = False
@@ -66,20 +77,20 @@ def evaluate_consensus(results: List[SignalResult], config: dict) -> ConsensusRe
         agreeing_strategies = []
         avg_strength = 0.0
 
-        if long_votes >= min_votes:
+        if long_votes >= min_votes and long_votes > short_votes:
             direction = "LONG"
             fired = True
-            agreeing_strategies = [r.strategy_name for r in results if r.direction == "LONG"]
-            avg_strength = sum(r.strength for r in results if r.direction == "LONG") / long_votes
+            agreeing_strategies = [r.strategy_name for r in long_results]
+            avg_strength = sum(r.strength for r in long_results) / long_votes
 
-        elif short_votes >= min_votes:
+        elif short_votes >= min_votes and short_votes > long_votes:
             direction = "SHORT"
             fired = True
-            agreeing_strategies = [r.strategy_name for r in results if r.direction == "SHORT"]
-            avg_strength = sum(r.strength for r in results if r.direction == "SHORT") / short_votes
+            agreeing_strategies = [r.strategy_name for r in short_results]
+            avg_strength = sum(r.strength for r in short_results) / short_votes
 
         else:
-            # No consensus
+            # No consensus or tied
             direction = "NEUTRAL"
             fired = False
             agreeing_strategies = []
