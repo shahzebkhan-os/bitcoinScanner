@@ -180,6 +180,54 @@ def setup_routes(app: FastAPI, config: dict, start_time: datetime, runtime_state
                     "bb_period":      int(body.get("bbPeriod", 20)),
                     "bb_std":         float(body.get("bbStd", 2)),
                 },
+                # Keep backtester signal-quality filters aligned with live scanner.
+                # Body params are optional; fall back to server config defaults.
+                "signal_filters": {
+                    "min_ema_spread_pct": float(body.get(
+                        "minEmaSpreadPct",
+                        config.get("signal_filters", {}).get("min_ema_spread_pct", 0.0005),
+                    )),
+                    "require_rsi_ema_alignment": bool(body.get(
+                        "requireRsiEmaAlignment",
+                        config.get("signal_filters", {}).get("require_rsi_ema_alignment", True),
+                    )),
+                    "rsi_ema_alignment_tolerance": float(body.get(
+                        "rsiEmaAlignmentTolerance",
+                        config.get("signal_filters", {}).get("rsi_ema_alignment_tolerance", 0.002),
+                    )),
+                    "vwap_crossover_only": bool(body.get(
+                        "vwapCrossoverOnly",
+                        config.get("signal_filters", {}).get("vwap_crossover_only", True),
+                    )),
+                    "vwap_vol_threshold": float(body.get(
+                        "vwapVolThreshold",
+                        config.get("signal_filters", {}).get("vwap_vol_threshold", 1.2),
+                    )),
+                    "breakout_vol_threshold": float(body.get(
+                        "breakoutVolThreshold",
+                        config.get("signal_filters", {}).get("breakout_vol_threshold", 1.5),
+                    )),
+                    "macd_rsi_long_min": float(body.get(
+                        "macdRsiLongMin",
+                        config.get("signal_filters", {}).get("macd_rsi_long_min", 40.0),
+                    )),
+                    "macd_rsi_long_max": float(body.get(
+                        "macdRsiLongMax",
+                        config.get("signal_filters", {}).get("macd_rsi_long_max", 68.0),
+                    )),
+                    "macd_rsi_short_min": float(body.get(
+                        "macdRsiShortMin",
+                        config.get("signal_filters", {}).get("macd_rsi_short_min", 32.0),
+                    )),
+                    "macd_rsi_short_max": float(body.get(
+                        "macdRsiShortMax",
+                        config.get("signal_filters", {}).get("macd_rsi_short_max", 60.0),
+                    )),
+                    "min_signal_strength": float(body.get(
+                        "minSignalStrength",
+                        config.get("signal_filters", {}).get("min_signal_strength", 0.0),
+                    )),
+                },
             }
 
             df = await fetch_candles_paginated(pair, interval, limit)

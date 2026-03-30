@@ -55,15 +55,34 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
         vol_multiplier   = float(config.get('volMultiplier', 1.2))
         use_htf_bias     = config.get('useHtfBias', False)
         htf_ema_period   = int(config.get('htfEmaPeriod', 100))   # ~15m EMA-7 equivalent on 1m
+        signal_filters = config.get('signal_filters', {})
+        min_ema_spread_pct = float(signal_filters.get('min_ema_spread_pct', 0.0005))
+        require_rsi_ema_alignment = bool(signal_filters.get('require_rsi_ema_alignment', True))
+        rsi_ema_alignment_tolerance = float(signal_filters.get('rsi_ema_alignment_tolerance', 0.002))
+        vwap_crossover_only = bool(signal_filters.get('vwap_crossover_only', True))
+        vwap_vol_threshold = float(signal_filters.get('vwap_vol_threshold', 1.2))
+        breakout_vol_threshold = float(signal_filters.get('breakout_vol_threshold', 1.5))
+        macd_rsi_long_min = float(signal_filters.get('macd_rsi_long_min', 40.0))
+        macd_rsi_long_max = float(signal_filters.get('macd_rsi_long_max', 68.0))
+        macd_rsi_short_min = float(signal_filters.get('macd_rsi_short_min', 32.0))
+        macd_rsi_short_max = float(signal_filters.get('macd_rsi_short_max', 60.0))
+        min_signal_strength = float(signal_filters.get('min_signal_strength', 0.0))
 
         # ── Indicators (vectorized) ───────────────────────────────────────────
         data['ema_fast'] = data['close'].ewm(span=ema_fast_p, adjust=False).mean()
         data['ema_slow'] = data['close'].ewm(span=ema_slow_p, adjust=False).mean()
 
         delta = data['close'].diff()
-        gain  = delta.where(delta > 0, 0.0).rolling(window=rsi_p).mean()
-        loss  = (-delta.where(delta < 0, 0.0)).rolling(window=rsi_p).mean()
-        data['rsi'] = 100 - (100 / (1 + (gain / loss.replace(0, np.nan)))).fillna(50)
+        gain = delta.where(delta > 0, 0.0)
+        loss = (-delta.where(delta < 0, 0.0))
+        alpha = 1.0 / max(1, rsi_p)
+        avg_gain = gain.ewm(alpha=alpha, adjust=False).mean()
+        avg_loss = loss.ewm(alpha=alpha, adjust=False).mean()
+        data['rsi'] = 50.0
+        normal = avg_loss > 0
+        rs = avg_gain[normal] / avg_loss[normal]
+        data.loc[normal, 'rsi'] = 100.0 - (100.0 / (1.0 + rs))
+        data.loc[(avg_loss == 0) & (avg_gain > 0), 'rsi'] = 100.0
 
         ema_f_macd      = data['close'].ewm(span=macd_f, adjust=False).mean()
         ema_s_macd      = data['close'].ewm(span=macd_s, adjust=False).mean()
@@ -93,6 +112,16 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
         data['roll_high'] = data['high'].rolling(window=20).max()
         data['roll_lo']   = data['low'].rolling(window=20).min()
         data['range_pct'] = ((data['roll_high'] - data['roll_lo']) / data['roll_lo'].replace(0, np.nan)) * 100
+        data['prev_roll_high'] = data['high'].rolling(window=20).max().shift(1)
+        data['prev_roll_lo'] = data['low'].rolling(window=20).min().shift(1)
+
+        data['ema_spread_pct'] = ((data['ema_fast'] - data['ema_slow']).abs() / data['ema_slow'].replace(0, np.nan)).fillna(0.0)
+        data['close_vs_vwap'] = np.where(data['close'] > data['vwap'], 'above', 'below')
+        data['prev_close_vs_vwap'] = data['close_vs_vwap'].shift(1).fillna(data['close_vs_vwap'])
+        data['macd_hist_prev'] = data['macd_hist'].shift(1)
+        data['macd_cross'] = 'none'
+        data.loc[(data['macd_hist_prev'] <= 0) & (data['macd_hist'] > 0), 'macd_cross'] = 'bullish'
+        data.loc[(data['macd_hist_prev'] >= 0) & (data['macd_hist'] < 0), 'macd_cross'] = 'bearish'
 
         # ATR Calculation for Trailing Stops
         data['tr0'] = abs(data['high'] - data['low'])
@@ -101,39 +130,89 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
         data['tr'] = data[['tr0', 'tr1', 'tr2']].max(axis=1)
         data['atr'] = data['tr'].rolling(window=14).mean().bfill()
 
-        # ── Strategy Votes ────────────────────────────────────────────────────
-        # s1: EMA Alignment (State-based for consensus)
+        # ── Strategy Votes (aligned with live scanner logic) ─────────────────
         s1 = pd.Series(0, index=data.index)
-        s1[data['ema_fast'] > data['ema_slow']] =  1
-        s1[data['ema_fast'] < data['ema_slow']] = -1
+        s1_strength = pd.Series(0.0, index=data.index)
+        ema_bull_cross = (data['ema_fast'].shift(1) <= data['ema_slow'].shift(1)) & (data['ema_fast'] > data['ema_slow'])
+        ema_bear_cross = (data['ema_fast'].shift(1) >= data['ema_slow'].shift(1)) & (data['ema_fast'] < data['ema_slow'])
+        spread_ok = data['ema_spread_pct'] >= min_ema_spread_pct
+        s1[ema_bull_cross & spread_ok] = 1
+        s1[ema_bear_cross & spread_ok] = -1
+        s1_strength[s1 != 0] = (0.60 + data.loc[s1 != 0, 'ema_spread_pct'] * 50).clip(upper=0.95)
 
         s2 = pd.Series(0, index=data.index)
-        s2[(data['rsi'] < 30) & (data['close'] < data['bb_lo'])] =  1
-        s2[(data['rsi'] > 70) & (data['close'] > data['bb_up'])] = -1
+        s2_strength = pd.Series(0.0, index=data.index)
+        s2_long = (data['rsi'] < 30) & (data['close'] < data['bb_lo'])
+        s2_short = (data['rsi'] > 70) & (data['close'] > data['bb_up'])
+        if require_rsi_ema_alignment:
+            s2_long = s2_long & (data['ema_fast'] >= data['ema_slow'] * (1.0 - rsi_ema_alignment_tolerance))
+            s2_short = s2_short & (data['ema_fast'] <= data['ema_slow'] * (1.0 + rsi_ema_alignment_tolerance))
+        s2[s2_long] = 1
+        s2[s2_short] = -1
+        s2_strength[s2 != 0] = 0.80
 
         s3 = pd.Series(0, index=data.index)
-        s3[(data['close'] > data['vwap']) & (data['vol_ratio'] > 1.2)] =  1
-        s3[(data['close'] < data['vwap']) & (data['vol_ratio'] > 1.2)] = -1
+        s3_strength = pd.Series(0.0, index=data.index)
+        vol_ok_vwap = data['vol_ratio'] > vwap_vol_threshold
+        if vwap_crossover_only:
+            crossed_above = (data['prev_close_vs_vwap'] == 'below') & (data['close_vs_vwap'] == 'above')
+            crossed_below = (data['prev_close_vs_vwap'] == 'above') & (data['close_vs_vwap'] == 'below')
+            s3[crossed_above & vol_ok_vwap] = 1
+            s3[crossed_below & vol_ok_vwap] = -1
+        else:
+            s3[(data['close_vs_vwap'] == 'above') & vol_ok_vwap] = 1
+            s3[(data['close_vs_vwap'] == 'below') & vol_ok_vwap] = -1
+        s3_strength[s3 != 0] = (0.60 + (data.loc[s3 != 0, 'vol_ratio'] - 1.0) * 0.15).clip(upper=0.90)
 
         s4 = pd.Series(0, index=data.index)
+        s4_strength = pd.Series(0.0, index=data.index)
         ranging = data['range_pct'] <= 1.5
-        near_lo  = (data['close'] - data['roll_lo']).abs() / data['roll_lo'].replace(0, np.nan) < 0.001
-        near_hi  = (data['close'] - data['roll_high']).abs() / data['roll_high'].replace(0, np.nan) < 0.001
-        s4[ranging & near_lo  & (data['rsi'] < 45)] =  1
-        s4[ranging & near_hi  & (data['rsi'] > 55)] = -1
+        near_lo = (data['close'] - data['roll_lo']).abs() / data['roll_lo'].replace(0, np.nan) < 0.001
+        near_hi = (data['close'] - data['roll_high']).abs() / data['roll_high'].replace(0, np.nan) < 0.001
+        s4[ranging & near_lo & (data['rsi'] < 45)] = 1
+        s4[ranging & near_hi & (data['rsi'] > 55)] = -1
+        s4_strength[s4 != 0] = 0.65
 
         s5 = pd.Series(0, index=data.index)
-        s5[(data['close'] > data['roll_high'] * 1.002) & (data['vol_ratio'] > 1.5)] =  1
-        s5[(data['close'] < data['roll_lo']   * 0.998) & (data['vol_ratio'] > 1.5)] = -1
+        s5_strength = pd.Series(0.0, index=data.index)
+        breakout_long = (data['close'] > data['prev_roll_high'] * 1.002) & (data['vol_ratio'] > breakout_vol_threshold)
+        breakout_short = (data['close'] < data['prev_roll_lo'] * 0.998) & (data['vol_ratio'] > breakout_vol_threshold)
+        s5[breakout_long] = 1
+        s5[breakout_short] = -1
+        s5_long_excess = ((data['close'] - data['prev_roll_high']) / data['prev_roll_high'].replace(0, np.nan)).fillna(0.0)
+        s5_short_excess = ((data['prev_roll_lo'] - data['close']) / data['prev_roll_lo'].replace(0, np.nan)).fillna(0.0)
+        s5_strength[breakout_long] = (0.75 + (s5_long_excess[breakout_long] * 10) + ((data.loc[breakout_long, 'vol_ratio'] - 1.5) * 0.05)).clip(upper=0.95)
+        s5_strength[breakout_short] = (0.75 + (s5_short_excess[breakout_short] * 10) + ((data.loc[breakout_short, 'vol_ratio'] - 1.5) * 0.05)).clip(upper=0.95)
 
-        # s6: MACD Alignment (State-based for consensus)
         s6 = pd.Series(0, index=data.index)
-        s6[data['macd_hist'] > 0] =  1
-        s6[data['macd_hist'] < 0] = -1
+        s6_strength = pd.Series(0.0, index=data.index)
+        s6_long = (
+            (data['macd_cross'] == 'bullish') &
+            (data['macd_hist'] > 0) &
+            (data['close_vs_vwap'] == 'above') &
+            (data['rsi'] >= macd_rsi_long_min) &
+            (data['rsi'] <= macd_rsi_long_max)
+        )
+        s6_short = (
+            (data['macd_cross'] == 'bearish') &
+            (data['macd_hist'] < 0) &
+            (data['close_vs_vwap'] == 'below') &
+            (data['rsi'] >= macd_rsi_short_min) &
+            (data['rsi'] <= macd_rsi_short_max)
+        )
+        s6[s6_long] = 1
+        s6[s6_short] = -1
+        s6_strength[s6 != 0] = 0.78
 
         votes = pd.DataFrame({'s1': s1, 's2': s2, 's3': s3, 's4': s4, 's5': s5, 's6': s6})
-        data['long_votes']  = (votes == 1).sum(axis=1)
-        data['short_votes'] = (votes == -1).sum(axis=1)
+        strengths = pd.DataFrame({
+            's1': s1_strength, 's2': s2_strength, 's3': s3_strength,
+            's4': s4_strength, 's5': s5_strength, 's6': s6_strength
+        }).fillna(0.0)
+        qualified_votes = votes.where(strengths >= min_signal_strength, 0)
+
+        data['long_votes'] = (qualified_votes == 1).sum(axis=1)
+        data['short_votes'] = (qualified_votes == -1).sum(axis=1)
 
         # ── Compute Filters (vectorized) ──────────────────────────────────────
         # 1. Trend Filter: EMA-fast must align with direction
@@ -167,13 +246,15 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
         s_cols = ['s1', 's2', 's3', 's4', 's5', 's6']
 
         # Helper: get strategies that agree with a direction at given row
-        def get_agreeing(row_votes, direction):
-            return [
-                strategy_names[i]
-                for i, sc in enumerate(s_cols)
-                if (direction == "LONG"  and row_votes[sc] == 1) or
-                   (direction == "SHORT" and row_votes[sc] == -1)
-            ]
+        def get_agreeing(row_votes, row_strengths, direction):
+            agreeing = []
+            for i, sc in enumerate(s_cols):
+                strength_ok = row_strengths[sc] >= min_signal_strength
+                if direction == "LONG" and row_votes[sc] == 1 and strength_ok:
+                    agreeing.append(strategy_names[i])
+                elif direction == "SHORT" and row_votes[sc] == -1 and strength_ok:
+                    agreeing.append(strategy_names[i])
+            return agreeing
 
         signals: List[Dict[str, Any]] = []
         position     = None   # None, "LONG", "SHORT"
@@ -270,8 +351,8 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
                 position = None
 
                 # Immediately try to enter SHORT on this same candle (if filters pass)
-                if sv >= min_votes and short_ok:
-                    agreeing = get_agreeing(votes.iloc[idx], "SHORT")
+                if sv >= min_votes and short_ok and sv > lv:
+                    agreeing = get_agreeing(votes.iloc[idx], strengths.iloc[idx], "SHORT")
                     iso_ts   = make_iso(ts)
                     signals.append({
                         "timestamp":       iso_ts,
@@ -279,6 +360,7 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
                         "price":           close,
                         "votes":           f"{sv}/6",
                         "strategies":      "; ".join(agreeing),
+                        "agreeingStrategies": agreeing,
                         "avgStrength":     round(len(agreeing) / 6, 2),
                         "interval":        "history",
                         "entry":           close,
@@ -304,8 +386,8 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
                 position = None
 
                 # Immediately try to enter LONG on this same candle (if filters pass)
-                if lv >= min_votes and long_ok:
-                    agreeing = get_agreeing(votes.iloc[idx], "LONG")
+                if lv >= min_votes and long_ok and lv > sv:
+                    agreeing = get_agreeing(votes.iloc[idx], strengths.iloc[idx], "LONG")
                     iso_ts   = make_iso(ts)
                     signals.append({
                         "timestamp":       iso_ts,
@@ -313,6 +395,7 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
                         "price":           close,
                         "votes":           f"{lv}/6",
                         "strategies":      "; ".join(agreeing),
+                        "agreeingStrategies": agreeing,
                         "avgStrength":     round(len(agreeing) / 6, 2),
                         "interval":        "history",
                         "entry":           close,
@@ -332,14 +415,14 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
 
             # ── Open a new position if flat ───────────────────────────────────
             if position is None:
-                if lv >= min_votes and long_ok:
+                if lv >= min_votes and long_ok and lv > sv:
                     direction = "LONG"
-                elif sv >= min_votes and short_ok:
+                elif sv >= min_votes and short_ok and sv > lv:
                     direction = "SHORT"
                 else:
                     continue  # flat and no valid signal
 
-                agreeing = get_agreeing(votes.iloc[idx], direction)
+                agreeing = get_agreeing(votes.iloc[idx], strengths.iloc[idx], direction)
                 iso_ts   = make_iso(ts)
                 signals.append({
                     "timestamp":       iso_ts,
@@ -347,6 +430,7 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
                     "price":           close,
                     "votes":           f"{lv if direction == 'LONG' else sv}/6",
                     "strategies":      "; ".join(agreeing),
+                    "agreeingStrategies": agreeing,
                     "avgStrength":     round(len(agreeing) / 6, 2),
                     "interval":        "history",
                     "entry":           close,

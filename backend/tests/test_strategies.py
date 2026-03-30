@@ -21,7 +21,13 @@ def _range_df(base=100.0):
 def test_ema_strategy_long_short_neutral(snapshot_factory, base_config):
     strat = EMAcrossoverStrategy()
     # Bullish crossover with sufficient EMA spread (ema_fast clearly above ema_slow)
-    assert strat.evaluate(snapshot_factory(ema_crossover="bullish", ema_fast=101.0, ema_slow=100.0, ema_spread_pct=0.001), base_config).direction == "LONG"
+    bullish_snapshot = snapshot_factory(
+        ema_crossover="bullish",
+        ema_fast=101.0,
+        ema_slow=100.0,
+        ema_spread_pct=0.001,
+    )
+    assert strat.evaluate(bullish_snapshot, base_config).direction == "LONG"
     # Bearish crossover with sufficient EMA spread
     assert strat.evaluate(snapshot_factory(ema_crossover="bearish", ema_fast=99.0, ema_slow=100.0, ema_spread_pct=0.001), base_config).direction == "SHORT"
     # No crossover
@@ -30,16 +36,52 @@ def test_ema_strategy_long_short_neutral(snapshot_factory, base_config):
     assert strat.evaluate(snapshot_factory(ema_crossover="bullish", ema_spread_pct=0.00001), base_config).direction == "NEUTRAL"
 
 
+def test_ema_strategy_respects_configured_min_spread(snapshot_factory, base_config):
+    strat = EMAcrossoverStrategy()
+    config = dict(base_config)
+    config["signal_filters"] = {"min_ema_spread_pct": 0.002}
+
+    # Below configured threshold -> filtered out
+    assert strat.evaluate(
+        snapshot_factory(ema_crossover="bullish", ema_spread_pct=0.0015),
+        config,
+    ).direction == "NEUTRAL"
+
+    # Above configured threshold -> allowed
+    assert strat.evaluate(
+        snapshot_factory(ema_crossover="bullish", ema_spread_pct=0.0025),
+        config,
+    ).direction == "LONG"
+
+
 def test_rsi_bollinger_strategy_long_short_neutral(snapshot_factory, base_config):
     strat = RSIBollingerStrategy()
     # LONG: RSI oversold + below BB + EMA aligned (ema_fast >= ema_slow)
-    assert strat.evaluate(snapshot_factory(rsi=20, close_vs_bb="below_lower", ema_fast=101.0, ema_slow=100.0), base_config).direction == "LONG"
+    long_snapshot = snapshot_factory(
+        rsi=20,
+        close_vs_bb="below_lower",
+        ema_fast=101.0,
+        ema_slow=100.0,
+    )
+    assert strat.evaluate(long_snapshot, base_config).direction == "LONG"
     # SHORT: RSI overbought + above BB + EMA aligned (ema_fast <= ema_slow)
-    assert strat.evaluate(snapshot_factory(rsi=80, close_vs_bb="above_upper", ema_fast=99.0, ema_slow=100.0), base_config).direction == "SHORT"
+    short_snapshot = snapshot_factory(
+        rsi=80,
+        close_vs_bb="above_upper",
+        ema_fast=99.0,
+        ema_slow=100.0,
+    )
+    assert strat.evaluate(short_snapshot, base_config).direction == "SHORT"
     # NEUTRAL: mid-RSI
     assert strat.evaluate(snapshot_factory(rsi=50, close_vs_bb="inside"), base_config).direction == "NEUTRAL"
     # LONG condition but bearish EMA alignment → NEUTRAL (trend filter)
-    assert strat.evaluate(snapshot_factory(rsi=20, close_vs_bb="below_lower", ema_fast=97.0, ema_slow=100.0), base_config).direction == "NEUTRAL"
+    misaligned_snapshot = snapshot_factory(
+        rsi=20,
+        close_vs_bb="below_lower",
+        ema_fast=97.0,
+        ema_slow=100.0,
+    )
+    assert strat.evaluate(misaligned_snapshot, base_config).direction == "NEUTRAL"
 
 
 def test_vwap_bounce_strategy_long_short_neutral(snapshot_factory, base_config):

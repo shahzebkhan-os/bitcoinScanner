@@ -116,11 +116,15 @@ def calculate_indicators(df: pd.DataFrame, config: dict) -> Optional[IndicatorSn
         delta = data['close'].diff()
         gain = delta.where(delta > 0, 0.0)
         loss = (-delta.where(delta < 0, 0.0))
-        # EWM with alpha=1/period replicates Wilder's method
+        # EWM with alpha=1/period replicates Wilder's smoothing method.
+        # This is the standard RSI formulation used by TradingView.
         alpha = 1.0 / rsi_period
         avg_gain = gain.ewm(alpha=alpha, adjust=False).mean()
         avg_loss = loss.ewm(alpha=alpha, adjust=False).mean()
-        # Edge cases: avg_loss == 0 → RSI 100 (pure uptrend) or 50 (no movement)
+        # Edge cases:
+        # - avg_loss == 0 and avg_gain > 0 => RSI 100 (pure uptrend)
+        # - avg_loss == 0 and avg_gain == 0 => RSI remains default 50 (flat market)
+        # - avg_gain == 0 and avg_loss > 0 => RSI 0 (pure downtrend, via normal formula)
         rsi_series = pd.Series(50.0, index=data.index)
         normal = avg_loss > 0
         rs = avg_gain[normal] / avg_loss[normal]

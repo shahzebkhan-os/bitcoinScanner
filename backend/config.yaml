@@ -38,7 +38,7 @@ indicators:
 signal_filters:
   # EMA crossover: minimum spread between EMA9 and EMA21 as a fraction of price.
   # Crossovers with spread below this threshold are ignored (whipsaw protection).
-  # Default 0.0005 = 0.05% of price (e.g. $50 gap on $100k BTC).
+  # Default 0.0005 = 0.05% of price (e.g., $50 gap on $100k BTC).
   min_ema_spread_pct: 0.0005
 
   # RSI+Bollinger strategy: also require EMA fast/slow alignment.
@@ -61,6 +61,8 @@ signal_filters:
 
   # Breakout strategy: minimum volume ratio to confirm a real breakout.
   breakout_vol_threshold: 1.5
+
+  # MACD Momentum: RSI zone for LONG signals (inclusive).
   # Avoids buying on MACD cross when RSI is already overbought.
   macd_rsi_long_min: 40.0
   macd_rsi_long_max: 68.0

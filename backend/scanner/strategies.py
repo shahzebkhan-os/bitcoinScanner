@@ -15,6 +15,9 @@ import pandas as pd
 from scanner.indicators import IndicatorSnapshot
 
 logger = logging.getLogger(__name__)
+EMA_SPREAD_STRENGTH_MULTIPLIER = 50.0
+VWAP_STRENGTH_BASE = 0.60
+VWAP_STRENGTH_VOL_MULTIPLIER = 0.15
 
 
 @dataclass
@@ -39,7 +42,7 @@ class EMAcrossoverStrategy:
         avoid whipsaw signals when the two EMAs are nearly equal.
         """
         filters = config.get('signal_filters', {})
-        min_spread = float(filters.get('min_ema_spread_pct', 0.0005))  # 0.05% default
+        min_spread = float(filters.get('min_ema_spread_pct', 0.0005))  # 0.0005 = 0.05%
 
         if snapshot.ema_crossover == "bullish":
             if snapshot.ema_spread_pct < min_spread:
@@ -49,8 +52,9 @@ class EMAcrossoverStrategy:
                     strength=0.0,
                     reason=f"Bullish EMA cross but spread too small ({snapshot.ema_spread_pct:.4%}) — whipsaw risk"
                 )
-            # Strength scales with spread: wider separation = stronger signal
-            strength = min(0.95, 0.60 + snapshot.ema_spread_pct * 50)
+            # Strength scales with spread: wider separation = stronger signal.
+            # 50x multiplier maps small spread increases into useful 0..1 strength granularity.
+            strength = min(0.95, 0.60 + snapshot.ema_spread_pct * EMA_SPREAD_STRENGTH_MULTIPLIER)  # capped at 0.95 to keep headroom below 1.0
             return SignalResult(
                 strategy_name="EMAcrossoverStrategy",
                 direction="LONG",
@@ -65,7 +69,8 @@ class EMAcrossoverStrategy:
                     strength=0.0,
                     reason=f"Bearish EMA cross but spread too small ({snapshot.ema_spread_pct:.4%}) — whipsaw risk"
                 )
-            strength = min(0.95, 0.60 + snapshot.ema_spread_pct * 50)
+            # Same scaling as bullish case for symmetry.
+            strength = min(0.95, 0.60 + snapshot.ema_spread_pct * EMA_SPREAD_STRENGTH_MULTIPLIER)
             return SignalResult(
                 strategy_name="EMAcrossoverStrategy",
                 direction="SHORT",
@@ -174,7 +179,8 @@ class VWAPBounceStrategy:
             crossed_below = (snapshot.prev_close_vs_vwap == "above" and snapshot.close_vs_vwap == "below")
 
             if crossed_above:
-                strength = min(0.90, 0.60 + (snapshot.volume_ratio - 1.0) * 0.15)
+                # Base 0.60 + 0.15 per volume multiple above 1.0x, capped at 0.90.
+                strength = min(0.90, VWAP_STRENGTH_BASE + (snapshot.volume_ratio - 1.0) * VWAP_STRENGTH_VOL_MULTIPLIER)
                 return SignalResult(
                     strategy_name="VWAPBounceStrategy",
                     direction="LONG",
@@ -182,7 +188,8 @@ class VWAPBounceStrategy:
                     reason=f"Price crossed ABOVE VWAP with volume {snapshot.volume_ratio:.2f}x avg"
                 )
             elif crossed_below:
-                strength = min(0.90, 0.60 + (snapshot.volume_ratio - 1.0) * 0.15)
+                # Same scaling as bullish case for symmetry.
+                strength = min(0.90, VWAP_STRENGTH_BASE + (snapshot.volume_ratio - 1.0) * VWAP_STRENGTH_VOL_MULTIPLIER)
                 return SignalResult(
                     strategy_name="VWAPBounceStrategy",
                     direction="SHORT",
@@ -305,7 +312,7 @@ class BreakoutStrategy:
 
         # Calculate range over last 20 candles (excluding current)
         recent = df.iloc[-21:-1] if len(df) > 20 else df.iloc[:-1]
-        if len(recent) == 0:
+        if len(recent) < 20:
             return SignalResult(
                 strategy_name="BreakoutStrategy",
                 direction="NEUTRAL",

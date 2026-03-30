@@ -67,8 +67,15 @@ def evaluate_consensus(results: List[SignalResult], config: dict) -> ConsensusRe
         min_strength = float(filters.get('min_signal_strength', 0.0))
 
         # Count votes, optionally filtering by minimum strength
-        long_results = [r for r in results if r.direction == "LONG" and r.strength >= min_strength]
-        short_results = [r for r in results if r.direction == "SHORT" and r.strength >= min_strength]
+        long_results = []
+        short_results = []
+        for r in results:
+            if r.strength < min_strength:
+                continue
+            if r.direction == "LONG":
+                long_results.append(r)
+            elif r.direction == "SHORT":
+                short_results.append(r)
         # Neutral includes both genuine neutrals and votes filtered out by strength threshold
         long_votes = len(long_results)
         short_votes = len(short_results)
@@ -80,6 +87,7 @@ def evaluate_consensus(results: List[SignalResult], config: dict) -> ConsensusRe
         agreeing_strategies = []
         avg_strength = 0.0
 
+        # Require strict dominance: ties remain NEUTRAL to avoid ambiguous signals.
         if long_votes >= min_votes and long_votes > short_votes:
             direction = "LONG"
             fired = True
