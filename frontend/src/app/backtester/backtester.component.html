@@ -85,12 +85,46 @@
     </div>
 
     <div class="divider"></div>
-    <p class="section-title">Exit Sensitivity</p>
+    <p class="section-title">Exit Strategy</p>
 
     <div class="control-group">
-      <label>Min Exit Votes <span class="value-badge">{{ params.minExitVotes }}/6</span></label>
+      <label>Reversal Votes <span class="value-badge">{{ params.minExitVotes }}/6</span></label>
       <input type="range" min="1" max="6" step="1" [(ngModel)]="params.minExitVotes" />
-      <span class="hint">Lower = exits quicker on reversal signal</span>
+      <span class="hint">Exit on opposing consensus</span>
+    </div>
+
+    <!-- Fixed TP/SL -->
+    <div class="filter-row" style="margin-top: 8px;">
+      <label class="toggle-label">
+        <input type="checkbox" [(ngModel)]="params.useFixedRiskReward" />
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        Fixed % Target
+      </label>
+      <span class="filter-desc">Exit on exact TP/SL</span>
+    </div>
+    <div class="control-row" *ngIf="params.useFixedRiskReward">
+      <div class="control-group">
+        <label>SL %</label>
+        <input type="number" step="0.1" min="0.1" [(ngModel)]="params.fixedStopLossPct" />
+      </div>
+      <div class="control-group">
+        <label>TP %</label>
+        <input type="number" step="0.1" min="0.1" [(ngModel)]="params.fixedTakeProfitPct" />
+      </div>
+    </div>
+
+    <!-- Trailing Stop -->
+    <div class="filter-row" style="margin-top: 8px;">
+      <label class="toggle-label">
+        <input type="checkbox" [(ngModel)]="params.useTrailingStop" />
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        ATR Trailing Stop
+      </label>
+      <span class="filter-desc">Locks in profit</span>
+    </div>
+    <div class="control-group" *ngIf="params.useTrailingStop">
+      <label>ATR Multiplier <span class="value-badge">{{ params.trailingStopAtr }}</span></label>
+      <input type="range" min="0.5" max="5.0" step="0.1" [(ngModel)]="params.trailingStopAtr" />
     </div>
 
     <div class="divider"></div>
@@ -269,6 +303,35 @@
       </div>
     </div>
 
+    <!-- Strategy Performance Section -->
+    <div class="strategy-section" *ngIf="stats?.strategyPerformance && stats!.strategyPerformance!.length > 0">
+      <div class="strategy-header">
+        <h3>🎯 Strategy Combinations Performance</h3>
+      </div>
+      <div class="table-wrapper strategy-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Strategy Combination</th>
+              <th>Trades</th>
+              <th>Win Rate</th>
+              <th>Net P&amp;L</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let s of stats?.strategyPerformance">
+              <td class="strat-tags-cell">
+                <span class="strat-tag" *ngFor="let tag of s.strategies.split('; ')">{{ tag }}</span>
+              </td>
+              <td>{{ s.trades }}</td>
+              <td [class.positive]="s.winRate >= 50" [class.negative]="s.winRate < 50">{{ s.winRate }}%</td>
+              <td [class]="getPnlClass(s.pnl)">${{ s.pnl | number:'1.2-2' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- Chart Section (Fixed height) -->
     <div class="chart-section">
       <div class="chart-legend">
@@ -281,12 +344,12 @@
     </div>
 
     <!-- Equity Curve Section -->
-    <div class="equity-section" *ngIf="stats?.equityCurve && stats.equityCurve.length > 0">
+    <div class="equity-section" *ngIf="stats?.equityCurve && (stats?.equityCurve?.length ?? 0) > 0">
       <div class="equity-header">
         <h3>📈 Equity Curve</h3>
         <span class="equity-stats">
-          Start: ${{ stats.initialCapital | number:'1.0-0' }} → End: ${{ stats.finalCapital | number:'1.0-0' }}
-          ({{ ((stats.finalCapital - stats.initialCapital) / stats.initialCapital * 100) | number:'1.1-1' }}%)
+          Start: ${{ stats?.initialCapital | number:'1.0-0' }} → End: ${{ stats?.finalCapital | number:'1.0-0' }}
+          ({{ (((stats?.finalCapital ?? 0) - (stats?.initialCapital ?? 0)) / (stats?.initialCapital ?? 1) * 100) | number:'1.1-1' }}%)
         </span>
       </div>
       <div #equityChartContainer class="equity-chart"></div>

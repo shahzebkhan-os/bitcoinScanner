@@ -43,7 +43,11 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
         risk_cfg    = config.get('risk', {})
         min_votes   = config.get('min_votes', 3)
         target_rr   = risk_cfg.get('target_rr', 1.5)
-        stop_pct    = risk_cfg.get('default_stop_loss_pct', 0.002)
+        use_ts      = risk_cfg.get('useTrailingStop', False)
+        ts_atr      = risk_cfg.get('trailingStopAtr', 2.0)
+        use_fs      = risk_cfg.get('useFixedRiskReward', False)
+        fs_sl       = risk_cfg.get('fixedStopLossPct', 1.0) / 100.0
+        fs_tp       = risk_cfg.get('fixedTakeProfitPct', 2.0) / 100.0
 
         # ── Filter settings ───────────────────────────────────────────────────
         use_trend_filter = config.get('useTrendFilter', False)
@@ -89,6 +93,13 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
         data['roll_high'] = data['high'].rolling(window=20).max()
         data['roll_lo']   = data['low'].rolling(window=20).min()
         data['range_pct'] = ((data['roll_high'] - data['roll_lo']) / data['roll_lo'].replace(0, np.nan)) * 100
+
+        # ATR Calculation for Trailing Stops
+        data['tr0'] = abs(data['high'] - data['low'])
+        data['tr1'] = abs(data['high'] - data['close'].shift())
+        data['tr2'] = abs(data['low'] - data['close'].shift())
+        data['tr'] = data[['tr0', 'tr1', 'tr2']].max(axis=1)
+        data['atr'] = data['tr'].rolling(window=14).mean().bfill()
 
         # ── Strategy Votes ────────────────────────────────────────────────────
         # s1: EMA Alignment (State-based for consensus)
@@ -167,6 +178,7 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
         signals: List[Dict[str, Any]] = []
         position     = None   # None, "LONG", "SHORT"
         entry_price  = 0.0
+        peak_price   = 0.0    # Tracks highest/lowest price for trailing stops
         entry_ts     = None
         entry_idx    = -1
         entry_votes_str = ""
@@ -194,7 +206,62 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
                 (not use_htf_bias      or bool(row['htf_short_ok']))
             )
 
-            # ── Check for exit / reversal ─────────────────────────────────────
+            # ── Check for hard TP/SL or Trailing Stop Hit ─────────────────────
+            if position == "LONG":
+                peak_price = max(peak_price, float(row['high']))
+                atr = float(row['atr'])
+                ts_price = peak_price - (atr * ts_atr)
+                sl_price = entry_price * (1 - fs_sl)
+                tp_price = entry_price * (1 + fs_tp)
+
+                exit_reason = None
+                exit_price = None
+
+                if use_fs and float(row['low']) <= sl_price:
+                    exit_reason = 'stoploss'
+                    exit_price = sl_price
+                elif use_fs and float(row['high']) >= tp_price:
+                    exit_reason = 'target'
+                    exit_price = tp_price
+                elif use_ts and float(row['low']) <= ts_price:
+                    exit_reason = 'trailing_stop'
+                    exit_price = ts_price
+
+                if exit_reason:
+                    signals[-1]['exitTimestamp'] = make_iso(ts)
+                    signals[-1]['exitPrice']     = exit_price
+                    signals[-1]['exitType']      = exit_reason
+                    position = None
+                    continue
+
+            elif position == "SHORT":
+                peak_price = min(peak_price, float(row['low']))
+                atr = float(row['atr'])
+                ts_price = peak_price + (atr * ts_atr)
+                sl_price = entry_price * (1 + fs_sl)
+                tp_price = entry_price * (1 - fs_tp)
+
+                exit_reason = None
+                exit_price = None
+
+                if use_fs and float(row['high']) >= sl_price:
+                    exit_reason = 'stoploss'
+                    exit_price = sl_price
+                elif use_fs and float(row['low']) <= tp_price:
+                    exit_reason = 'target'
+                    exit_price = tp_price
+                elif use_ts and float(row['high']) >= ts_price:
+                    exit_reason = 'trailing_stop'
+                    exit_price = ts_price
+
+                if exit_reason:
+                    signals[-1]['exitTimestamp'] = make_iso(ts)
+                    signals[-1]['exitPrice']     = exit_price
+                    signals[-1]['exitType']      = exit_reason
+                    position = None
+                    continue
+
+            # ── Check for standard reversal logic ─────────────────────────────
             if position == "LONG" and sv >= min_exit_votes:
                 # Exit the LONG
                 signals[-1]['exitTimestamp'] = make_iso(ts)
@@ -225,6 +292,8 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
                         "exitType":        "open",
                     })
                     position = "SHORT"
+                    entry_price = close
+                    peak_price = close
                 continue  # Move to next candle after exit
 
             elif position == "SHORT" and lv >= min_exit_votes:
@@ -257,6 +326,8 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
                         "exitType":        "open",
                     })
                     position = "LONG"
+                    entry_price = close
+                    peak_price = close
                 continue
 
             # ── Open a new position if flat ───────────────────────────────────
@@ -289,6 +360,8 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
                     "exitType":        "open",
                 })
                 position = direction
+                entry_price = close
+                peak_price = close
 
         # Mark last open trade as "open" (already set, no change needed)
         logger.info(f"Backtest complete: {len(signals)} trades in {len(data)} candles (position-based exits)")

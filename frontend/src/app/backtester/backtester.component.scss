@@ -209,11 +209,11 @@
 /* ── Main area ──────────────────────────────────────────── */
 .main-area {
   flex: 1;
-  overflow: hidden; /* Prevent entire page scroll */
+  overflow-y: auto; /* Allow scrolling through all result sections */
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px; /* Slightly tighter gap */
   min-width: 0;
 }
 
@@ -221,15 +221,15 @@
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-  flex-shrink: 0; /* Stats don't shrink */
+  gap: 8px; /* Tighter gap */
+  flex-shrink: 0;
 }
 
 .stat-card {
   background: #13151c;
   border: 1px solid #1e2130;
   border-radius: 8px;
-  padding: 12px 14px;
+  padding: 10px 12px; /* Reduced padding */
   text-align: center;
 
   .stat-label { font-size: 10px; color: #5a5e78; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-family: 'JetBrains Mono', monospace; }
@@ -252,7 +252,7 @@
   background: #13151c;
   border: 1px solid #1e2130;
   border-radius: 8px;
-  padding: 14px;
+  padding: 12px; /* Reduced padding */
   flex-shrink: 0;
 }
 
@@ -271,7 +271,47 @@
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
+  gap: 8px; /* Tighter gap */
+}
+
+/* Strategy Performance Section */
+.strategy-section {
+  background: #13151c;
+  border: 1px solid #1e2130;
+  border-radius: 8px;
+  padding: 12px;
+  flex-shrink: 0;
+}
+
+.strategy-header {
+  margin-bottom: 12px;
+
+  h3 {
+    font-size: 14px;
+    color: #e0e3f0;
+    font-family: 'JetBrains Mono', monospace;
+    margin: 0;
+    font-weight: 600;
+  }
+}
+
+.strategy-table {
+  max-height: 200px;
+}
+
+.strat-tags-cell {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.strat-tag {
+  background: #2a2d3e;
+  color: #9498b0;
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid #3c4059;
 }
 
 .metric-card {
@@ -457,11 +497,11 @@
 
 /* Trades Section - Consolidated */
 .trades-section {
-  flex: 1; /* Take remaining space */
+  flex-shrink: 0; /* Don't shrink in the scrollable container */
   display: flex;
   flex-direction: column;
-  min-height: 0; /* Allow flex shrinking */
-  max-height: 350px; /* Prevent excessive growth */
+  min-height: 400px; /* Give it some space */
+  max-height: 600px; /* Allow more growth but keep internal scroll */
   overflow: hidden;
   background: #13151c;
   border: 1px solid #1e2130;
@@ -566,10 +606,11 @@ table {
   font-size: 10px;
   font-weight: 600;
 }
-.exit-pill.target   { background: #00d4a322; color: #00d4a3; }
-.exit-pill.stoploss { background: #f7931a22; color: #f7931a; }
-.exit-pill.signal   { background: #9b59b622; color: #9b59b6; }
-.exit-pill.open     { background: #9498b022; color: #9498b0; }
+.exit-pill.target        { background: #00d4a322; color: #00d4a3; }
+.exit-pill.stoploss      { background: #f04b5c22; color: #f04b5c; }
+.exit-pill.trailing_stop { background: #f7931a22; color: #f7931a; }
+.exit-pill.signal        { background: #9b59b622; color: #9b59b6; }
+.exit-pill.open          { background: #9498b022; color: #9498b0; }
 .result-pill.win  { background: #00d4a322; color: #00d4a3; }
 .result-pill.loss { background: #f04b5c22; color: #f04b5c; }
 .result-pill.open { background: #9498b022; color: #9498b0; }

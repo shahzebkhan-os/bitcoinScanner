@@ -22,6 +22,12 @@ interface BacktestParams {
   volMultiplier: number;
   useHtfBias: boolean;
   htfEmaPeriod: number;
+  // Exits
+  useTrailingStop: boolean;
+  trailingStopAtr: number;
+  useFixedRiskReward: boolean;
+  fixedStopLossPct: number;
+  fixedTakeProfitPct: number;
 }
 
 interface BacktestStats {
@@ -53,6 +59,13 @@ interface BacktestStats {
   buyHoldReturn?: number;
   buyHoldFinal?: number;
   vsHoldPct?: number;
+  strategyPerformance?: Array<{
+    strategies: string;
+    trades: number;
+    wins: number;
+    winRate: number;
+    pnl: number;
+  }>;
 }
 
 interface TradeRow {
@@ -102,6 +115,11 @@ export class BacktesterComponent implements OnInit, OnDestroy {
     volMultiplier: 1.2,
     useHtfBias: false,
     htfEmaPeriod: 100,
+    useTrailingStop: false,
+    trailingStopAtr: 2.0,
+    useFixedRiskReward: false,
+    fixedStopLossPct: 1.0,      // 1%
+    fixedTakeProfitPct: 2.0,    // 2%
   };
 
   intervalOptions = ['1m', '3m', '5m', '15m'];
@@ -171,6 +189,11 @@ export class BacktesterComponent implements OnInit, OnDestroy {
         volMultiplier:   this.params.volMultiplier,
         useHtfBias:      this.params.useHtfBias,
         htfEmaPeriod:    this.params.htfEmaPeriod,
+        useTrailingStop:    this.params.useTrailingStop,
+        trailingStopAtr:    this.params.trailingStopAtr,
+        useFixedRiskReward: this.params.useFixedRiskReward,
+        fixedStopLossPct:   this.params.fixedStopLossPct,
+        fixedTakeProfitPct: this.params.fixedTakeProfitPct,
       };
 
       const resp = await fetch(`${this.API_URL}/backtest`, {

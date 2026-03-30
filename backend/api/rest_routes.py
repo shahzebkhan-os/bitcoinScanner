@@ -160,6 +160,11 @@ def setup_routes(app: FastAPI, config: dict, start_time: datetime, runtime_state
                 "useHtfBias":      bool(body.get("useHtfBias", False)),
                 "htfEmaPeriod":    int(body.get("htfEmaPeriod", 100)),
                 "risk": {
+                    "useTrailingStop":       bool(body.get("useTrailingStop", False)),
+                    "trailingStopAtr":       float(body.get("trailingStopAtr", 2.0)),
+                    "useFixedRiskReward":    bool(body.get("useFixedRiskReward", False)),
+                    "fixedStopLossPct":      float(body.get("fixedStopLossPct", 1.0)),
+                    "fixedTakeProfitPct":    float(body.get("fixedTakeProfitPct", 2.0)),
                     "target_rr":             1.5,
                     "default_stop_loss_pct": 0.002,
                 },
@@ -224,6 +229,7 @@ def setup_routes(app: FastAPI, config: dict, start_time: datetime, runtime_state
             max_win_streak = 0
             max_loss_streak = 0
             current_streak_type = None  # "win" or "loss"
+            strategy_perf = {}
 
             for s in signals:
                 entry  = s["entry"]
@@ -241,7 +247,7 @@ def setup_routes(app: FastAPI, config: dict, start_time: datetime, runtime_state
                 else:
                     short_total += 1
 
-                if s.get("exitType") == "signal" and exit_p is not None:
+                if s.get("exitType") != "open" and exit_p is not None:
                     pct_chg = (exit_p - entry) / entry if s["direction"] == "LONG" else (entry - exit_p) / entry
                     pnl     = trade_capital * pct_chg
                     capital += pnl
@@ -257,9 +263,16 @@ def setup_routes(app: FastAPI, config: dict, start_time: datetime, runtime_state
                             "capital": round(capital, 2)
                         })
 
+                    strat_key = s.get("strategies", "Unknown")
+                    if strat_key not in strategy_perf:
+                        strategy_perf[strat_key] = {"trades": 0, "wins": 0, "pnl": 0.0}
+                    strategy_perf[strat_key]["trades"] += 1
+                    strategy_perf[strat_key]["pnl"] += pnl
+
                     if pnl > 0:
                         total_profit += pnl
                         wins_count += 1
+                        strategy_perf[strat_key]["wins"] += 1
                         if s["direction"] == "LONG": long_wins += 1
                         else: short_wins += 1
                         result_label = "WIN"
@@ -342,6 +355,17 @@ def setup_routes(app: FastAPI, config: dict, start_time: datetime, runtime_state
                 buy_hold_return = ((last_price - first_price) / first_price) * 100
                 buy_hold_final_capital = initial_capital * (1 + buy_hold_return / 100)
 
+            strat_perf_list = []
+            for k, v in strategy_perf.items():
+                strat_perf_list.append({
+                    "strategies": k,
+                    "trades": v["trades"],
+                    "wins": v["wins"],
+                    "winRate": round(v["wins"] / v["trades"] * 100, 1) if v["trades"] > 0 else 0,
+                    "pnl": round(v["pnl"], 2)
+                })
+            strat_perf_list.sort(key=lambda x: x["pnl"], reverse=True)
+
             stats = {
                 "totalTrades":   total,
                 "wins":          wins_count,
@@ -371,6 +395,7 @@ def setup_routes(app: FastAPI, config: dict, start_time: datetime, runtime_state
                 "buyHoldReturn": round(buy_hold_return, 2),
                 "buyHoldFinal":  round(buy_hold_final_capital, 2),
                 "vsHoldPct":     round(total_return_pct - buy_hold_return, 2),
+                "strategyPerformance": strat_perf_list,
             }
 
             return {"candles": candles_list, "signals": signals, "stats": stats, "trades": trade_rows}
