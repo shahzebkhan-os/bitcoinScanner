@@ -43,13 +43,14 @@ def test_calculate_indicators_prev_close_vs_vwap(candles_df, base_config):
 def test_calculate_indicators_rsi_wilder_smoothing(base_config):
     """
     RSI should use Wilder's EWM smoothing (not SMA).
-    For a consistently upward-trending price series, RSI must be well above 50.
-    With the old SMA approach a monotone series yields RSI = 100 (division by zero
-    fallback to 50), whereas EWM gives a finite value above 50.
+    For a consistently upward-trending price series with no down candles,
+    avg_loss is 0 and RSI must be 100 (all gains, no losses).
+    Wilder's method explicitly handles this edge case; a naive SMA approach
+    would produce NaN (0/0) and fall back to an arbitrary default value.
     """
     import pandas as pd
     times = pd.date_range("2026-01-01", periods=100, freq="min", tz="UTC")
-    closes = [100 + i * 0.5 for i in range(100)]  # strong uptrend
+    closes = [100 + i * 0.5 for i in range(100)]  # strict uptrend — every close higher
     df = pd.DataFrame({
         "time": times,
         "open": closes,
@@ -60,5 +61,5 @@ def test_calculate_indicators_rsi_wilder_smoothing(base_config):
     })
     snapshot = calculate_indicators(df, base_config)
     assert snapshot is not None
-    # Wilder RSI on a monotone uptrend converges toward ~100 but is finite
-    assert 50 < snapshot.rsi <= 100
+    # Wilder RSI with no losses must be 100
+    assert snapshot.rsi == 100.0

@@ -55,7 +55,10 @@ def evaluate_consensus(results: List[SignalResult], config: dict) -> ConsensusRe
     - Optional min_signal_strength filter: strategies with strength below the
       threshold do not count towards the vote (avoids weak/uncertain votes
       inflating consensus counts).
-    - LONG takes priority only when it meets the threshold; ties are NEUTRAL.
+    - Tie-breaking: LONG only fires when long_votes > short_votes; when both
+      directions meet min_votes with equal counts the result is NEUTRAL (no
+      signal). This is intentional: ambiguous markets should not fire a trade.
+      The rationale is that a genuine consensus requires one side to dominate.
     """
     try:
         # Get min_votes threshold and optional strength filter

@@ -54,10 +54,13 @@ signal_filters:
   # Minimum volume ratio for VWAP Bounce strategy.
   vwap_vol_threshold: 1.2
 
+  # RSI+Bollinger EMA alignment tolerance: EMA must differ by more than this
+  # fraction of EMA slow before the alignment check blocks the signal.
+  # 0.002 = 0.2% — allows nearly-equal EMAs while still blocking clear divergence.
+  rsi_ema_alignment_tolerance: 0.002
+
   # Breakout strategy: minimum volume ratio to confirm a real breakout.
   breakout_vol_threshold: 1.5
-
-  # MACD Momentum: RSI zone for LONG signals (inclusive).
   # Avoids buying on MACD cross when RSI is already overbought.
   macd_rsi_long_min: 40.0
   macd_rsi_long_max: 68.0

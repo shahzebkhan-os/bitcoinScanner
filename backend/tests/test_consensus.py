@@ -108,3 +108,19 @@ def test_consensus_long_wins_over_short_when_more_votes(base_config):
     c = evaluate_consensus(results, base_config)
     assert c.direction == "LONG"
     assert c.fired is True
+
+
+def test_consensus_short_wins_when_short_votes_exceed_long(base_config):
+    """SHORT wins when it has more votes than LONG even if LONG also meets min_votes."""
+    results = [
+        _result("s1", "LONG", 0.8),
+        _result("s2", "LONG", 0.7),
+        _result("s3", "LONG", 0.6),
+        _result("s4", "SHORT", 0.8),
+        _result("s5", "SHORT", 0.7),
+        _result("s6", "SHORT", 0.6),
+        _result("s7", "SHORT", 0.5),
+    ]
+    c = evaluate_consensus(results, base_config)
+    assert c.direction == "SHORT"
+    assert c.fired is True

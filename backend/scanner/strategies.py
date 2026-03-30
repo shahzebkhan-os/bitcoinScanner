@@ -100,10 +100,11 @@ class RSIBollingerStrategy:
         rsi_overbought = ind_config.get('rsi_overbought', 70)
         filters = config.get('signal_filters', {})
         require_ema_alignment = filters.get('require_rsi_ema_alignment', True)
+        ema_tol = float(filters.get('rsi_ema_alignment_tolerance', 0.002))
 
         if snapshot.rsi < rsi_oversold and snapshot.close_vs_bb == "below_lower":
-            # Accuracy check: only buy if EMA fast >= EMA slow OR trend filter disabled
-            if require_ema_alignment and snapshot.ema_fast < snapshot.ema_slow * 0.998:
+            # Accuracy check: only buy if EMA fast is not significantly below EMA slow
+            if require_ema_alignment and snapshot.ema_fast < snapshot.ema_slow * (1.0 - ema_tol):
                 return SignalResult(
                     strategy_name="RSIBollingerStrategy",
                     direction="NEUTRAL",
@@ -117,8 +118,8 @@ class RSIBollingerStrategy:
                 reason=f"RSI oversold ({snapshot.rsi:.1f}) and price below lower BB with EMA aligned"
             )
         elif snapshot.rsi > rsi_overbought and snapshot.close_vs_bb == "above_upper":
-            # Accuracy check: only short if EMA fast <= EMA slow OR trend filter disabled
-            if require_ema_alignment and snapshot.ema_fast > snapshot.ema_slow * 1.002:
+            # Accuracy check: only short if EMA fast is not significantly above EMA slow
+            if require_ema_alignment and snapshot.ema_fast > snapshot.ema_slow * (1.0 + ema_tol):
                 return SignalResult(
                     strategy_name="RSIBollingerStrategy",
                     direction="NEUTRAL",
@@ -303,7 +304,14 @@ class BreakoutStrategy:
             )
 
         # Calculate range over last 20 candles (excluding current)
-        recent = df.iloc[-21:-1] if len(df) > 20 else df.tail(20)
+        recent = df.iloc[-21:-1] if len(df) > 20 else df.iloc[:-1]
+        if len(recent) == 0:
+            return SignalResult(
+                strategy_name="BreakoutStrategy",
+                direction="NEUTRAL",
+                strength=0.0,
+                reason="Insufficient historical candles for breakout detection"
+            )
         range_high = recent['high'].max()
         range_low = recent['low'].min()
 
