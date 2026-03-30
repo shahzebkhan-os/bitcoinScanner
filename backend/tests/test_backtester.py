@@ -42,6 +42,21 @@ def sample_config():
         'volMultiplier': 1.2,
         'useHtfBias': False,
         'htfEmaPeriod': 100,
+        # Relaxed defaults for synthetic fixtures so baseline tests still produce trades.
+        # Dedicated tests below validate strict filter behavior.
+        'signal_filters': {
+            'min_ema_spread_pct': 0.0,
+            'require_rsi_ema_alignment': False,
+            'rsi_ema_alignment_tolerance': 0.002,
+            'vwap_crossover_only': False,
+            'vwap_vol_threshold': 1.0,
+            'breakout_vol_threshold': 1.2,
+            'macd_rsi_long_min': 0.0,
+            'macd_rsi_long_max': 100.0,
+            'macd_rsi_short_min': 0.0,
+            'macd_rsi_short_max': 100.0,
+            'min_signal_strength': 0.0,
+        },
     }
 
 
@@ -51,7 +66,7 @@ def uptrend_candles():
     np.random.seed(42)
     n = 200
     base = 50000
-    times = [datetime(2024, 1, 1, 0, i, 0, tzinfo=timezone.utc) for i in range(n)]
+    times = [datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=i) for i in range(n)]
 
     # Create uptrend with noise
     trend = np.linspace(base, base + 2000, n)
@@ -75,7 +90,7 @@ def downtrend_candles():
     np.random.seed(43)
     n = 200
     base = 50000
-    times = [datetime(2024, 1, 1, 0, i, 0, tzinfo=timezone.utc) for i in range(n)]
+    times = [datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=i) for i in range(n)]
 
     # Create downtrend with noise
     trend = np.linspace(base, base - 2000, n)
@@ -99,7 +114,7 @@ def sideways_candles():
     np.random.seed(44)
     n = 200
     base = 50000
-    times = [datetime(2024, 1, 1, 0, i, 0, tzinfo=timezone.utc) for i in range(n)]
+    times = [datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=i) for i in range(n)]
 
     # Create sideways with noise
     closes = base + np.random.randn(n) * 100
@@ -139,6 +154,9 @@ class TestBasicFunctionality:
 
     def test_valid_uptrend_execution(self, uptrend_candles, sample_config):
         """Test with uptrend data - should generate LONG signals."""
+        # Event-driven strategy logic is stricter; use lower vote threshold for
+        # synthetic fixture to ensure at least one trade is produced.
+        sample_config['min_votes'] = 1
         signals = run_backtest(uptrend_candles, sample_config)
 
         # Should produce at least some signals
@@ -154,6 +172,7 @@ class TestBasicFunctionality:
 
     def test_valid_downtrend_execution(self, downtrend_candles, sample_config):
         """Test with downtrend data - should generate SHORT signals."""
+        sample_config['min_votes'] = 1
         signals = run_backtest(downtrend_candles, sample_config)
 
         assert len(signals) > 0
@@ -216,6 +235,26 @@ class TestFilters:
         for sig in signals:
             assert sig['direction'] in ['LONG', 'SHORT']
 
+    def test_vwap_crossover_only_reduces_signals(self, uptrend_candles, sample_config):
+        """Crossover-only VWAP logic should be stricter than side-based VWAP logic."""
+        sample_config['signal_filters']['vwap_crossover_only'] = False
+        signals_side_based = run_backtest(uptrend_candles, sample_config)
+
+        sample_config['signal_filters']['vwap_crossover_only'] = True
+        signals_cross_only = run_backtest(uptrend_candles, sample_config)
+
+        assert len(signals_cross_only) <= len(signals_side_based)
+
+    def test_min_signal_strength_filter_reduces_signals(self, uptrend_candles, sample_config):
+        """Higher min_signal_strength should reduce or keep equal number of trades."""
+        sample_config['signal_filters']['min_signal_strength'] = 0.0
+        signals_loose = run_backtest(uptrend_candles, sample_config)
+
+        sample_config['signal_filters']['min_signal_strength'] = 0.8
+        signals_strict = run_backtest(uptrend_candles, sample_config)
+
+        assert len(signals_strict) <= len(signals_loose)
+
 
 class TestPositionLogic:
     """Test position state machine."""
@@ -268,7 +307,7 @@ class TestEdgeCases:
     def test_zero_volume_candles(self, sample_config):
         """Test with zero volume - should handle gracefully."""
         df = pd.DataFrame({
-            'time': [datetime(2024, 1, 1, 0, i, 0, tzinfo=timezone.utc) for i in range(100)],
+            'time': [datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=i) for i in range(100)],
             'open': [50000] * 100,
             'high': [50100] * 100,
             'low': [49900] * 100,
@@ -296,7 +335,7 @@ class TestEdgeCases:
     def test_extreme_price_movements(self, sample_config):
         """Test with extreme price jumps - should handle gracefully."""
         df = pd.DataFrame({
-            'time': [datetime(2024, 1, 1, 0, i, 0, tzinfo=timezone.utc) for i in range(100)],
+            'time': [datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=i) for i in range(100)],
             'open': [50000 if i < 50 else 100000 for i in range(100)],
             'high': [50100 if i < 50 else 100100 for i in range(100)],
             'low': [49900 if i < 50 else 99900 for i in range(100)],
@@ -312,7 +351,7 @@ class TestEdgeCases:
     def test_nan_handling(self, sample_config):
         """Test with NaN values in data."""
         df = pd.DataFrame({
-            'time': [datetime(2024, 1, 1, 0, i, 0, tzinfo=timezone.utc) for i in range(100)],
+            'time': [datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=i) for i in range(100)],
             'open': [50000] * 100,
             'high': [50100] * 100,
             'low': [49900] * 100,

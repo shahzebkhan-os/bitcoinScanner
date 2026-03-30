@@ -10,12 +10,15 @@ Responsibilities:
 import logging
 import csv
 import os
+import itertools
+import math
 from datetime import datetime, timezone
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import yaml
 from typing import Optional
 from scanner.backtester import run_backtest
+import numpy as np
 
 logger = logging.getLogger(__name__)
 DEFAULT_STOP_LOSS_PCT = 0.002
@@ -32,6 +35,149 @@ def _camelize(data):
     if isinstance(data, dict):
         return {_snake_to_camel(str(k)): _camelize(v) for k, v in data.items()}
     return data
+
+
+def _build_backtest_config(body: dict, config: dict) -> dict:
+    min_votes = int(body.get("minVotes", config.get("min_votes", 3)))
+    min_exit_votes = int(body.get("minExitVotes", max(1, min_votes - 1)))
+
+    return {
+        "min_votes": min_votes,
+        "min_exit_votes": min_exit_votes,
+        "useTrendFilter": bool(body.get("useTrendFilter", False)),
+        "useVolumeFilter": bool(body.get("useVolumeFilter", False)),
+        "volMultiplier": float(body.get("volMultiplier", 1.2)),
+        "useHtfBias": bool(body.get("useHtfBias", False)),
+        "htfEmaPeriod": int(body.get("htfEmaPeriod", 100)),
+        "risk": {
+            "useTrailingStop": bool(body.get("useTrailingStop", False)),
+            "trailingStopAtr": float(body.get("trailingStopAtr", 2.0)),
+            "useFixedRiskReward": bool(body.get("useFixedRiskReward", False)),
+            "fixedStopLossPct": float(body.get("fixedStopLossPct", 1.0)),
+            "fixedTakeProfitPct": float(body.get("fixedTakeProfitPct", 2.0)),
+            "target_rr": 1.5,
+            "default_stop_loss_pct": 0.002,
+        },
+        "indicators": {
+            "ema_fast": int(body.get("emaFast", 9)),
+            "ema_slow": int(body.get("emaSlow", 21)),
+            "rsi_period": int(body.get("rsiPeriod", 14)),
+            "rsi_oversold": float(body.get("rsiOversold", 30)),
+            "rsi_overbought": float(body.get("rsiOverbought", 70)),
+            "macd_fast": int(body.get("macdFast", 12)),
+            "macd_slow": int(body.get("macdSlow", 26)),
+            "macd_signal": int(body.get("macdSignal", 9)),
+            "bb_period": int(body.get("bbPeriod", 20)),
+            "bb_std": float(body.get("bbStd", 2)),
+        },
+        "signal_filters": {
+            "min_ema_spread_pct": float(body.get(
+                "minEmaSpreadPct",
+                config.get("signal_filters", {}).get("min_ema_spread_pct", 0.0005),
+            )),
+            "require_rsi_ema_alignment": bool(body.get(
+                "requireRsiEmaAlignment",
+                config.get("signal_filters", {}).get("require_rsi_ema_alignment", True),
+            )),
+            "rsi_ema_alignment_tolerance": float(body.get(
+                "rsiEmaAlignmentTolerance",
+                config.get("signal_filters", {}).get("rsi_ema_alignment_tolerance", 0.002),
+            )),
+            "vwap_crossover_only": bool(body.get(
+                "vwapCrossoverOnly",
+                config.get("signal_filters", {}).get("vwap_crossover_only", True),
+            )),
+            "vwap_vol_threshold": float(body.get(
+                "vwapVolThreshold",
+                config.get("signal_filters", {}).get("vwap_vol_threshold", 1.2),
+            )),
+            "breakout_vol_threshold": float(body.get(
+                "breakoutVolThreshold",
+                config.get("signal_filters", {}).get("breakout_vol_threshold", 1.5),
+            )),
+            "macd_rsi_long_min": float(body.get(
+                "macdRsiLongMin",
+                config.get("signal_filters", {}).get("macd_rsi_long_min", 40.0),
+            )),
+            "macd_rsi_long_max": float(body.get(
+                "macdRsiLongMax",
+                config.get("signal_filters", {}).get("macd_rsi_long_max", 68.0),
+            )),
+            "macd_rsi_short_min": float(body.get(
+                "macdRsiShortMin",
+                config.get("signal_filters", {}).get("macd_rsi_short_min", 32.0),
+            )),
+            "macd_rsi_short_max": float(body.get(
+                "macdRsiShortMax",
+                config.get("signal_filters", {}).get("macd_rsi_short_max", 60.0),
+            )),
+            "min_signal_strength": float(body.get(
+                "minSignalStrength",
+                config.get("signal_filters", {}).get("min_signal_strength", 0.0),
+            )),
+        },
+    }
+
+
+def _compute_sweep_metrics(signals: list, initial_capital: float, trade_size_pct: float, trade_amount: float) -> dict:
+    """
+    Compute compact ranking metrics for a sweep result from backtest signals.
+
+    Args:
+        signals: Backtester trade/signal list.
+        initial_capital: Starting capital for simulated compounding.
+        trade_size_pct: Fraction of capital to deploy per trade when trade_amount is 0.
+        trade_amount: Fixed dollar position size (overrides trade_size_pct when > 0).
+
+    Returns:
+        Dict with netReturnPct, maxDrawdown, sortinoRatio, closedTrades, and winRate.
+    """
+    capital = initial_capital
+    peak_capital = initial_capital
+    max_drawdown = 0.0
+    returns_list = []
+    closed_trades = 0
+    wins = 0
+
+    for s in signals:
+        entry = s.get("entry")
+        exit_p = s.get("exitPrice")
+        if s.get("exitType") == "open" or exit_p is None or entry in (None, 0):
+            continue
+
+        trade_capital = trade_amount if trade_amount > 0 else capital * trade_size_pct
+        pct_chg = (exit_p - entry) / entry if s.get("direction") == "LONG" else (entry - exit_p) / entry
+        pnl = trade_capital * pct_chg
+        capital += pnl
+        closed_trades += 1
+        if pnl > 0:
+            wins += 1
+
+        returns_list.append(pct_chg * 100)
+        peak_capital = max(peak_capital, capital)
+        if peak_capital > 0:
+            drawdown = (peak_capital - capital) / peak_capital * 100
+            max_drawdown = max(max_drawdown, drawdown)
+
+    net_return_pct = ((capital - initial_capital) / initial_capital * 100) if initial_capital > 0 else 0.0
+    sortino_ratio = 0.0
+    if len(returns_list) > 1:
+        returns_arr = np.array(returns_list)
+        mean_return = np.mean(returns_arr)
+        downside_returns = returns_arr[returns_arr < 0]
+        if len(downside_returns) > 0:
+            downside_std = np.std(downside_returns)
+            if downside_std > 0:
+                sortino_ratio = mean_return / downside_std
+
+    win_rate = (wins / closed_trades * 100) if closed_trades > 0 else 0.0
+    return {
+        "netReturnPct": round(net_return_pct, 2),
+        "maxDrawdown": round(max_drawdown, 2),
+        "sortinoRatio": round(sortino_ratio, 2),
+        "closedTrades": closed_trades,
+        "winRate": round(win_rate, 1),
+    }
 
 
 def setup_routes(app: FastAPI, config: dict, start_time: datetime, runtime_state: Optional[dict] = None):
@@ -146,41 +292,7 @@ def setup_routes(app: FastAPI, config: dict, start_time: datetime, runtime_state
             interval = body.get("interval", "1m")
             limit    = min(50000, max(100, int(body.get("limit", 1000))))
 
-            min_votes      = int(body.get("minVotes", config.get("min_votes", 3)))
-            min_exit_votes = int(body.get("minExitVotes", max(1, min_votes - 1)))
-
-            # Build custom config from body parameters
-            custom_config = {
-                "min_votes":       min_votes,
-                "min_exit_votes":  min_exit_votes,
-                # ── Strategy filters ──────────────────────────────────────────
-                "useTrendFilter":  bool(body.get("useTrendFilter", False)),
-                "useVolumeFilter": bool(body.get("useVolumeFilter", False)),
-                "volMultiplier":   float(body.get("volMultiplier", 1.2)),
-                "useHtfBias":      bool(body.get("useHtfBias", False)),
-                "htfEmaPeriod":    int(body.get("htfEmaPeriod", 100)),
-                "risk": {
-                    "useTrailingStop":       bool(body.get("useTrailingStop", False)),
-                    "trailingStopAtr":       float(body.get("trailingStopAtr", 2.0)),
-                    "useFixedRiskReward":    bool(body.get("useFixedRiskReward", False)),
-                    "fixedStopLossPct":      float(body.get("fixedStopLossPct", 1.0)),
-                    "fixedTakeProfitPct":    float(body.get("fixedTakeProfitPct", 2.0)),
-                    "target_rr":             1.5,
-                    "default_stop_loss_pct": 0.002,
-                },
-                "indicators": {
-                    "ema_fast":       int(body.get("emaFast", 9)),
-                    "ema_slow":       int(body.get("emaSlow", 21)),
-                    "rsi_period":     int(body.get("rsiPeriod", 14)),
-                    "rsi_oversold":   float(body.get("rsiOversold", 30)),
-                    "rsi_overbought": float(body.get("rsiOverbought", 70)),
-                    "macd_fast":      int(body.get("macdFast", 12)),
-                    "macd_slow":      int(body.get("macdSlow", 26)),
-                    "macd_signal":    int(body.get("macdSignal", 9)),
-                    "bb_period":      int(body.get("bbPeriod", 20)),
-                    "bb_std":         float(body.get("bbStd", 2)),
-                },
-            }
+            custom_config = _build_backtest_config(body, config)
 
             df = await fetch_candles_paginated(pair, interval, limit)
             if df is None or df.empty:
@@ -402,6 +514,86 @@ def setup_routes(app: FastAPI, config: dict, start_time: datetime, runtime_state
 
         except Exception as e:
             logger.error(f"Backtest endpoint error: {e}", exc_info=True)
+            return {"error": str(e)}
+
+    @app.post("/backtest/sweep")
+    async def run_backtest_sweep(body: dict):
+        """Run a small parameter sweep and rank configs by return, drawdown, and Sortino."""
+        try:
+            from scanner.fetcher import fetch_candles_paginated
+
+            pair = body.get("pair", "BTCUSDT")
+            interval = body.get("interval", "1m")
+            limit = min(50000, max(100, int(body.get("limit", 1000))))
+            top_n = min(50, max(1, int(body.get("topN", 10))))
+            max_combinations = min(500, max(1, int(body.get("maxCombinations", 200))))
+            sortino_weight = float(body.get("sortinoWeight", 10.0))
+            drawdown_weight = float(body.get("drawdownWeight", 0.5))
+
+            sweep = body.get("sweep", {})
+            if not isinstance(sweep, dict) or not sweep:
+                raise HTTPException(status_code=400, detail="sweep must be a non-empty object of parameter arrays")
+
+            param_values = {
+                key: values for key, values in sweep.items()
+                if isinstance(values, list) and len(values) > 0
+            }
+            if not param_values:
+                raise HTTPException(status_code=400, detail="sweep must contain at least one non-empty parameter list")
+
+            keys = list(param_values.keys())
+            total_configs = math.prod(len(param_values[k]) for k in keys)
+            if total_configs > max_combinations:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"sweep expands to {total_configs} configs, exceeds maxCombinations={max_combinations}",
+                )
+            combinations_iter = itertools.product(*(param_values[k] for k in keys))
+            combinations = list(itertools.islice(combinations_iter, max_combinations))
+
+            df = await fetch_candles_paginated(pair, interval, limit)
+            if df is None or df.empty:
+                return {"results": [], "evaluatedConfigs": 0, "totalConfigs": 0}
+
+            initial_capital = float(body.get("initialCapital", 10000))
+            trade_size_pct = float(body.get("tradeSizePct", 0.1))
+            trade_amount = float(body.get("tradeAmount", 0))
+
+            scored_results = []
+            for values in combinations:
+                combo_params = dict(zip(keys, values))
+                combo_body = dict(body)
+                combo_body.update(combo_params)
+                custom_config = _build_backtest_config(combo_body, config)
+                signals = run_backtest(df, custom_config)
+                metrics = _compute_sweep_metrics(signals, initial_capital, trade_size_pct, trade_amount)
+                rank_score = (
+                    metrics["netReturnPct"]
+                    + (metrics["sortinoRatio"] * sortino_weight)
+                    - (metrics["maxDrawdown"] * drawdown_weight)
+                )
+                scored_results.append({
+                    "params": combo_params,
+                    **metrics,
+                    "rankScore": round(rank_score, 4),
+                })
+
+            scored_results.sort(key=lambda x: x["rankScore"], reverse=True)
+            return {
+                "rankFormula": f"netReturnPct + (sortinoRatio * {sortino_weight}) - (maxDrawdown * {drawdown_weight})",
+                "rankWeights": {
+                    "sortinoWeight": sortino_weight,
+                    "drawdownWeight": drawdown_weight,
+                },
+                "totalConfigs": total_configs,
+                "evaluatedConfigs": len(scored_results),
+                "topN": top_n,
+                "results": scored_results[:top_n],
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Backtest sweep endpoint error: {e}", exc_info=True)
             return {"error": str(e)}
 
     @app.get("/health")

@@ -40,6 +40,10 @@ class IndicatorSnapshot:
     volume_ratio: float
     current_price: float
     timestamp: datetime
+    # Signal accuracy enhancement fields (optional, default-safe for backward compat)
+    atr: float = 0.0                     # Average True Range (14-period)
+    ema_spread_pct: float = 0.0          # EMA fast-slow spread as % of price
+    prev_close_vs_vwap: str = "above"    # Previous candle's close vs VWAP
 
     def to_dict(self) -> dict:
         """Serialize to JSON-safe camelCase dict for WebSocket broadcast."""
@@ -63,7 +67,10 @@ class IndicatorSnapshot:
             "avgVolume": round(self.avg_volume, 4),
             "volumeRatio": round(self.volume_ratio, 4),
             "currentPrice": round(self.current_price, 4),
-            "timestamp": self.timestamp.isoformat()
+            "timestamp": self.timestamp.isoformat(),
+            "atr": round(self.atr, 4),
+            "emaSpreadPct": round(self.ema_spread_pct, 6),
+            "prevCloseVsVwap": self.prev_close_vs_vwap,
         }
 
 
@@ -105,12 +112,25 @@ def calculate_indicators(df: pd.DataFrame, config: dict) -> Optional[IndicatorSn
         data['ema_fast_prev'] = data['ema_fast'].shift(1)
         data['ema_slow_prev'] = data['ema_slow'].shift(1)
 
-        # 2. RSI Calculation (Wilder's smoothing)
+        # 2. RSI Calculation — Wilder's smoothing via EWM (matches TradingView)
         delta = data['close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=rsi_period).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=rsi_period).mean()
-        rs = gain / loss
-        data['rsi'] = 100 - (100 / (1 + rs))
+        gain = delta.where(delta > 0, 0.0)
+        loss = (-delta.where(delta < 0, 0.0))
+        # EWM with alpha=1/period replicates Wilder's smoothing method.
+        # This is the standard RSI formulation used by TradingView.
+        alpha = 1.0 / rsi_period
+        avg_gain = gain.ewm(alpha=alpha, adjust=False).mean()
+        avg_loss = loss.ewm(alpha=alpha, adjust=False).mean()
+        # Edge cases:
+        # - avg_loss == 0 and avg_gain > 0 => RSI 100 (pure uptrend)
+        # - avg_loss == 0 and avg_gain == 0 => RSI remains default 50 (flat market)
+        # - avg_gain == 0 and avg_loss > 0 => RSI 0 (pure downtrend, via normal formula)
+        rsi_series = pd.Series(50.0, index=data.index)
+        normal = avg_loss > 0
+        rs = avg_gain[normal] / avg_loss[normal]
+        rsi_series[normal] = 100.0 - (100.0 / (1.0 + rs))
+        rsi_series[(avg_loss == 0) & (avg_gain > 0)] = 100.0
+        data['rsi'] = rsi_series.fillna(50.0)
 
         # 3. MACD Calculation
         ema_fast_macd = data['close'].ewm(span=macd_fast, adjust=False).mean()
@@ -136,6 +156,13 @@ def calculate_indicators(df: pd.DataFrame, config: dict) -> Optional[IndicatorSn
         # 6. Volume Analysis
         data['avg_volume'] = data['volume'].rolling(window=20).mean()
         data['volume_ratio'] = data['volume'] / data['avg_volume']
+
+        # 7. ATR (Average True Range, 14-period) for volatility-aware filtering
+        data['tr0'] = abs(data['high'] - data['low'])
+        data['tr1'] = abs(data['high'] - data['close'].shift(1))
+        data['tr2'] = abs(data['low'] - data['close'].shift(1))
+        data['tr'] = data[['tr0', 'tr1', 'tr2']].max(axis=1)
+        data['atr'] = data['tr'].ewm(span=14, adjust=False).mean()
 
         # Get latest values
         latest = data.iloc[-1]
@@ -169,6 +196,14 @@ def calculate_indicators(df: pd.DataFrame, config: dict) -> Optional[IndicatorSn
         # Determine close vs VWAP
         close_vs_vwap = "above" if latest['close'] > latest['vwap'] else "below"
 
+        # Determine previous close vs VWAP (for crossover detection)
+        prev_close_vs_vwap = "above" if prev['close'] > prev['vwap'] else "below"
+
+        # EMA spread as % of price (guards against whipsaw signals when EMAs are too close)
+        ema_spread_pct = 0.0
+        if pd.notna(latest['ema_fast']) and pd.notna(latest['ema_slow']) and latest['ema_slow'] > 0:
+            ema_spread_pct = abs(latest['ema_fast'] - latest['ema_slow']) / latest['ema_slow']
+
         # Create snapshot
         snapshot = IndicatorSnapshot(
             ema_fast=float(latest['ema_fast']) if pd.notna(latest['ema_fast']) else 0.0,
@@ -190,7 +225,10 @@ def calculate_indicators(df: pd.DataFrame, config: dict) -> Optional[IndicatorSn
             avg_volume=float(latest['avg_volume']) if pd.notna(latest['avg_volume']) else 0.0,
             volume_ratio=float(latest['volume_ratio']) if pd.notna(latest['volume_ratio']) else 1.0,
             current_price=float(latest['close']) if pd.notna(latest['close']) else 0.0,
-            timestamp=latest['time'] if 'time' in latest.index else datetime.utcnow()
+            timestamp=latest['time'] if 'time' in latest.index else datetime.utcnow(),
+            atr=float(latest['atr']) if pd.notna(latest['atr']) else 0.0,
+            ema_spread_pct=ema_spread_pct,
+            prev_close_vs_vwap=prev_close_vs_vwap,
         )
 
         return snapshot
