@@ -124,3 +124,16 @@ def test_consensus_short_wins_when_short_votes_exceed_long(base_config):
     c = evaluate_consensus(results, base_config)
     assert c.direction == "SHORT"
     assert c.fired is True
+
+
+def test_consensus_min_votes_is_capped_to_enabled_strategies(base_config):
+    config = dict(base_config)
+    config["min_votes"] = 3
+    config["enabled_strategies"] = ["EMAcrossoverStrategy", "NeuralNetworkStrategy"]
+    results = [
+        _result("EMAcrossoverStrategy", "LONG", 0.9),
+        _result("NeuralNetworkStrategy", "LONG", 0.8),
+    ]
+    c = evaluate_consensus(results, config)
+    assert c.direction == "LONG"
+    assert c.fired is True

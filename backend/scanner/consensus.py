@@ -11,7 +11,7 @@ import logging
 from dataclasses import dataclass, asdict
 from typing import List
 
-from scanner.strategies import SignalResult
+from scanner.strategies import SignalResult, get_enabled_strategies
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,9 @@ def evaluate_consensus(results: List[SignalResult], config: dict) -> ConsensusRe
     """
     try:
         # Get min_votes threshold and optional strength filter
-        min_votes = config.get('min_votes', 3)
+        requested_min_votes = int(config.get('min_votes', 3))
+        enabled_count = max(1, len(get_enabled_strategies(config)))
+        min_votes = min(requested_min_votes, enabled_count)
         filters = config.get('signal_filters', {})
         min_strength = float(filters.get('min_signal_strength', 0.0))
 

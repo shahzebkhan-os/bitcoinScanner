@@ -206,6 +206,41 @@
   margin-top: 1px;
 }
 
+.strategy-picker {
+  display: grid;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.strategy-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #b4b8cf;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.ml-usage-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.ml-usage-track {
+  width: 100%;
+  height: 10px;
+  border-radius: 6px;
+  background: #1a1d2e;
+  overflow: hidden;
+}
+
+.ml-usage-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4a9eff, #00d4a3);
+}
+
 /* ── Main area ──────────────────────────────────────────── */
 .main-area {
   flex: 1;

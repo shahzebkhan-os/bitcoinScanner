@@ -158,7 +158,7 @@
         <div class="consensus-display">
           <div *ngIf="scannerData.consensus$ | async as consensus"
                [class]="'consensus-badge ' + consensus.direction.toLowerCase() + ' ' + getConsensusStrengthClass(consensus)">
-            <div class="consensus-direction">{{ consensus.direction }} {{ consensus.longVotes + consensus.shortVotes }}/6</div>
+            <div class="consensus-direction">{{ consensus.direction }} {{ consensus.longVotes + consensus.shortVotes }}/{{ getConsensusVoteTotal(consensus) }}</div>
             <div class="consensus-strength">
               Strength: {{ consensus.avgStrength | number:'1.2-2' }}
             </div>

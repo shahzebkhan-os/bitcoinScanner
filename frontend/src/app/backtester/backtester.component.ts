@@ -28,6 +28,9 @@ interface BacktestParams {
   useFixedRiskReward: boolean;
   fixedStopLossPct: number;
   fixedTakeProfitPct: number;
+  enabledStrategies: string[];
+  mlLongThreshold: number;
+  mlShortThreshold: number;
 }
 
 interface BacktestStats {
@@ -77,6 +80,7 @@ interface TradeRow {
   pnl: number;
   result: string;
   votes: string;
+  strategies?: string;
 }
 
 @Component({
@@ -120,6 +124,17 @@ export class BacktesterComponent implements OnInit, OnDestroy {
     useFixedRiskReward: false,
     fixedStopLossPct: 1.0,      // 1%
     fixedTakeProfitPct: 2.0,    // 2%
+    enabledStrategies: [
+      'EMAcrossoverStrategy',
+      'RSIBollingerStrategy',
+      'VWAPBounceStrategy',
+      'RangeTradingStrategy',
+      'BreakoutStrategy',
+      'MACDMomentumStrategy',
+      'NeuralNetworkStrategy',
+    ],
+    mlLongThreshold: 0.60,
+    mlShortThreshold: 0.40,
   };
 
   intervalOptions = ['1m', '3m', '5m', '15m'];
@@ -133,8 +148,18 @@ export class BacktesterComponent implements OnInit, OnDestroy {
   totalPages = 1;
   isLoading = false;
   errorMessage = '';
+  selectionHint = '';
 
   private candleTimes: number[] = [];
+  readonly availableStrategies = [
+    { key: 'EMAcrossoverStrategy', label: 'EMA Crossover' },
+    { key: 'RSIBollingerStrategy', label: 'RSI + Bollinger' },
+    { key: 'VWAPBounceStrategy', label: 'VWAP Bounce' },
+    { key: 'RangeTradingStrategy', label: 'Range Trading' },
+    { key: 'BreakoutStrategy', label: 'Breakout' },
+    { key: 'MACDMomentumStrategy', label: 'MACD Momentum' },
+    { key: 'NeuralNetworkStrategy', label: 'Neural Network (ML)' },
+  ];
 
   ngOnInit(): void {
     this.chart = createChart(this.chartContainer.nativeElement, {
@@ -194,6 +219,9 @@ export class BacktesterComponent implements OnInit, OnDestroy {
         useFixedRiskReward: this.params.useFixedRiskReward,
         fixedStopLossPct:   this.params.fixedStopLossPct,
         fixedTakeProfitPct: this.params.fixedTakeProfitPct,
+        enabledStrategies:  this.params.enabledStrategies,
+        mlLongThreshold:    this.params.mlLongThreshold,
+        mlShortThreshold:   this.params.mlShortThreshold,
       };
 
       const resp = await fetch(`${this.API_URL}/backtest`, {
@@ -296,8 +324,44 @@ export class BacktesterComponent implements OnInit, OnDestroy {
     this.candleSeries.setMarkers(markers);
   }
 
+  toggleStrategy(name: string, enabled: boolean): void {
+    if (enabled) {
+      if (!this.params.enabledStrategies.includes(name)) {
+        this.params.enabledStrategies = [...this.params.enabledStrategies, name];
+        this.selectionHint = '';
+      }
+      return;
+    }
+    if (this.params.enabledStrategies.length <= 1) {
+      this.selectionHint = 'At least one strategy must remain enabled.';
+      return;
+    }
+    this.params.enabledStrategies = this.params.enabledStrategies.filter(s => s !== name);
+    this.selectionHint = '';
+    if (this.params.minVotes > this.params.enabledStrategies.length) {
+      this.params.minVotes = this.params.enabledStrategies.length;
+    }
+    if (this.params.minExitVotes > this.params.enabledStrategies.length) {
+      this.params.minExitVotes = this.params.enabledStrategies.length;
+    }
+  }
+
   getPnlClass(val: number): string {
     return val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral';
+  }
+
+  getMlSignalCount(): number {
+    return this.allTrades.filter((t: TradeRow) =>
+      ((t.strategies || '') as string)
+        .split(';')
+        .map((s: string) => s.trim())
+        .includes('NeuralNetworkStrategy')
+    ).length;
+  }
+
+  getMlSignalPercent(): number {
+    if (!this.allTrades.length) return 0;
+    return (this.getMlSignalCount() / this.allTrades.length) * 100;
   }
 
   updateDisplayedTrades(): void {
