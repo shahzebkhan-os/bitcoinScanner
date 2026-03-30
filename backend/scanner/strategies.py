@@ -15,8 +15,11 @@ import pandas as pd
 from scanner.indicators import IndicatorSnapshot
 
 logger = logging.getLogger(__name__)
+# Multiplies EMA spread percent into a practical 0..1 strength contribution.
 EMA_SPREAD_STRENGTH_MULTIPLIER = 50.0
+# Baseline confidence for VWAP crossover signals before volume lift.
 VWAP_STRENGTH_BASE = 0.60
+# Additional strength per 1.0x volume above baseline.
 VWAP_STRENGTH_VOL_MULTIPLIER = 0.15
 
 
@@ -311,6 +314,8 @@ class BreakoutStrategy:
             )
 
         # Calculate range over last 20 candles (excluding current)
+        # Need 21 rows so [-21:-1] yields exactly 20 fully closed candles
+        # and excludes the current in-progress candle at [-1].
         recent = df.iloc[-21:-1] if len(df) > 20 else df.iloc[:-1]
         if len(recent) < 20:
             return SignalResult(
