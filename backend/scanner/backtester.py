@@ -80,6 +80,11 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
         min_signal_strength = float(signal_filters.get('min_signal_strength', 0.0))
         ml_long_threshold = float(signal_filters.get('ml_long_threshold', 0.60))
         ml_short_threshold = float(signal_filters.get('ml_short_threshold', 0.40))
+        ml_weight_ema_bias = float(signal_filters.get('ml_weight_ema_bias', ML_WEIGHT_EMA_BIAS))
+        ml_weight_macd_sign = float(signal_filters.get('ml_weight_macd_sign', ML_WEIGHT_MACD_SIGN))
+        ml_weight_vwap_bias = float(signal_filters.get('ml_weight_vwap_bias', ML_WEIGHT_VWAP_BIAS))
+        ml_weight_rsi_norm = float(signal_filters.get('ml_weight_rsi_norm', ML_WEIGHT_RSI_NORM))
+        ml_weight_volume_bias = float(signal_filters.get('ml_weight_volume_bias', ML_WEIGHT_VOLUME_BIAS))
 
         # ── Indicators (vectorized) ───────────────────────────────────────────
         data['ema_fast'] = data['close'].ewm(span=ema_fast_p, adjust=False).mean()
@@ -224,11 +229,11 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
         rsi_norm = ((data['rsi'] - 50.0) / 50.0).fillna(0.0).clip(-1.0, 1.0)
         volume_bias = (data['vol_ratio'] - 1.0).fillna(0.0).clip(-1.0, 1.0)
         z = (
-            ML_WEIGHT_EMA_BIAS * ema_bias +
-            ML_WEIGHT_MACD_SIGN * macd_sign +
-            ML_WEIGHT_VWAP_BIAS * vwap_bias +
-            ML_WEIGHT_RSI_NORM * rsi_norm +
-            ML_WEIGHT_VOLUME_BIAS * volume_bias
+            ml_weight_ema_bias * ema_bias +
+            ml_weight_macd_sign * macd_sign +
+            ml_weight_vwap_bias * vwap_bias +
+            ml_weight_rsi_norm * rsi_norm +
+            ml_weight_volume_bias * volume_bias
         )
         z = z.clip(-20.0, 20.0)
         p_long = 1.0 / (1.0 + np.exp(-z))

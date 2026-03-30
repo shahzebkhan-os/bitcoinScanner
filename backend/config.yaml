@@ -88,6 +88,13 @@ signal_filters:
   # Neural strategy thresholds for LONG/SHORT classification.
   ml_long_threshold: 0.60
   ml_short_threshold: 0.40
+  # Neural strategy feature weights (used by live scanner + backtester).
+  # Tune these to "train" a new ML profile from your own backtest results.
+  ml_weight_ema_bias: 0.65
+  ml_weight_macd_sign: 0.55
+  ml_weight_vwap_bias: 0.45
+  ml_weight_rsi_norm: 0.40
+  ml_weight_volume_bias: 0.30
 
 risk:
   max_leverage: 5

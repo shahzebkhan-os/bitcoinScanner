@@ -124,6 +124,26 @@ def _build_backtest_config(body: dict, config: dict) -> dict:
                 "mlShortThreshold",
                 config.get("signal_filters", {}).get("ml_short_threshold", 0.40),
             )),
+            "ml_weight_ema_bias": float(body.get(
+                "mlWeightEmaBias",
+                config.get("signal_filters", {}).get("ml_weight_ema_bias", 0.65),
+            )),
+            "ml_weight_macd_sign": float(body.get(
+                "mlWeightMacdSign",
+                config.get("signal_filters", {}).get("ml_weight_macd_sign", 0.55),
+            )),
+            "ml_weight_vwap_bias": float(body.get(
+                "mlWeightVwapBias",
+                config.get("signal_filters", {}).get("ml_weight_vwap_bias", 0.45),
+            )),
+            "ml_weight_rsi_norm": float(body.get(
+                "mlWeightRsiNorm",
+                config.get("signal_filters", {}).get("ml_weight_rsi_norm", 0.40),
+            )),
+            "ml_weight_volume_bias": float(body.get(
+                "mlWeightVolumeBias",
+                config.get("signal_filters", {}).get("ml_weight_volume_bias", 0.30),
+            )),
         },
     }
 

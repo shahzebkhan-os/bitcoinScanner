@@ -455,6 +455,11 @@ class NeuralNetworkStrategy:
         filters = config.get("signal_filters", {})
         long_threshold = float(filters.get("ml_long_threshold", 0.60))
         short_threshold = float(filters.get("ml_short_threshold", 0.40))
+        weight_ema_bias = float(filters.get("ml_weight_ema_bias", ML_WEIGHT_EMA_BIAS))
+        weight_macd_sign = float(filters.get("ml_weight_macd_sign", ML_WEIGHT_MACD_SIGN))
+        weight_vwap_bias = float(filters.get("ml_weight_vwap_bias", ML_WEIGHT_VWAP_BIAS))
+        weight_rsi_norm = float(filters.get("ml_weight_rsi_norm", ML_WEIGHT_RSI_NORM))
+        weight_volume_bias = float(filters.get("ml_weight_volume_bias", ML_WEIGHT_VOLUME_BIAS))
 
         # Feature engineering (normalized)
         ema_bias = float((snapshot.ema_fast > snapshot.ema_slow) - (snapshot.ema_fast < snapshot.ema_slow))
@@ -464,11 +469,11 @@ class NeuralNetworkStrategy:
         volume_bias = max(-1.0, min(1.0, snapshot.volume_ratio - 1.0))
 
         z = (
-            ML_WEIGHT_EMA_BIAS * ema_bias +
-            ML_WEIGHT_MACD_SIGN * macd_sign +
-            ML_WEIGHT_VWAP_BIAS * vwap_bias +
-            ML_WEIGHT_RSI_NORM * rsi_norm +
-            ML_WEIGHT_VOLUME_BIAS * volume_bias
+            weight_ema_bias * ema_bias +
+            weight_macd_sign * macd_sign +
+            weight_vwap_bias * vwap_bias +
+            weight_rsi_norm * rsi_norm +
+            weight_volume_bias * volume_bias
         )
         z = max(-20.0, min(20.0, z))
         probability_long = 1.0 / (1.0 + math.exp(-z))
