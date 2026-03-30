@@ -23,6 +23,10 @@ init(autoreset=True)
 logger = logging.getLogger(__name__)
 
 
+def _vote_capacity(consensus: ConsensusResult) -> int:
+    return max(1, consensus.long_votes + consensus.short_votes + consensus.neutral_votes)
+
+
 def dispatch_alerts(consensus: ConsensusResult, snapshot: IndicatorSnapshot, config: dict):
     """
     Dispatch alerts based on configuration.
@@ -63,13 +67,14 @@ def _send_terminal_alert(consensus: ConsensusResult, snapshot: IndicatorSnapshot
             symbol = "●"
 
         # Format message
+        vote_capacity = _vote_capacity(consensus)
         message = f"""
 {color}{'=' * 80}{Style.RESET_ALL}
 {color}{symbol} SIGNAL FIRED: {consensus.direction} {symbol}{Style.RESET_ALL}
 {color}{'=' * 80}{Style.RESET_ALL}
 Timestamp: {timestamp}
 Price: ${snapshot.current_price:,.2f}
-Votes: {len(consensus.agreeing_strategies)}/6
+Votes: {len(consensus.agreeing_strategies)}/{vote_capacity}
 Strength: {consensus.avg_strength:.2f}
 Strategies: {', '.join(consensus.agreeing_strategies)}
 
@@ -89,9 +94,10 @@ def _send_desktop_alert(consensus: ConsensusResult, snapshot: IndicatorSnapshot)
     """Send desktop notification."""
     try:
         title = f"🔔 {consensus.direction} Signal"
+        vote_capacity = _vote_capacity(consensus)
         message = (
             f"Price: ${snapshot.current_price:,.2f}\n"
-            f"Votes: {len(consensus.agreeing_strategies)}/6\n"
+            f"Votes: {len(consensus.agreeing_strategies)}/{vote_capacity}\n"
             f"Strength: {consensus.avg_strength:.2f}"
         )
 

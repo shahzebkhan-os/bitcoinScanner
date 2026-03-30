@@ -172,7 +172,8 @@ export class AppComponent implements OnInit, OnDestroy {
   getConsensusStrengthPercent(consensus: ConsensusResult | null): number {
     if (!consensus) return 0;
     const activeVotes = consensus.longVotes + consensus.shortVotes;
-    return (activeVotes / 6) * 100;
+    const totalVotes = this.getConsensusVoteTotal(consensus);
+    return (activeVotes / totalVotes) * 100;
   }
 
   getConsensusStrengthClass(consensus: ConsensusResult | null): string {
@@ -181,6 +182,11 @@ export class AppComponent implements OnInit, OnDestroy {
     if (percent >= 66) return 'strong'; // 4+ votes
     if (percent >= 50) return 'moderate'; // 3 votes
     return 'weak';
+  }
+
+  getConsensusVoteTotal(consensus: ConsensusResult | null): number {
+    if (!consensus) return 1;
+    return Math.max(1, consensus.longVotes + consensus.shortVotes + consensus.neutralVotes);
   }
 
   // Format elapsed time since last consensus change

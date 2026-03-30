@@ -55,9 +55,21 @@
     <p class="section-title">Consensus</p>
 
     <div class="control-group">
-      <label>Min Votes <span class="value-badge">{{ params.minVotes }}/6</span></label>
-      <input type="range" min="1" max="6" step="1" [(ngModel)]="params.minVotes" />
+      <label>Min Votes <span class="value-badge">{{ params.minVotes }}/{{ params.enabledStrategies.length }}</span></label>
+      <input type="range" min="1" [max]="params.enabledStrategies.length" step="1" [(ngModel)]="params.minVotes" />
     </div>
+
+    <div class="strategy-picker">
+      <label class="strategy-option" *ngFor="let s of availableStrategies">
+        <input
+          type="checkbox"
+          [checked]="params.enabledStrategies.includes(s.key)"
+          (change)="toggleStrategy(s.key, $any($event.target).checked)"
+        />
+        <span>{{ s.label }}</span>
+      </label>
+    </div>
+    <div class="hint" *ngIf="selectionHint">{{ selectionHint }}</div>
 
     <div class="divider"></div>
     <p class="section-title">Indicators</p>
@@ -88,9 +100,21 @@
     <p class="section-title">Exit Strategy</p>
 
     <div class="control-group">
-      <label>Reversal Votes <span class="value-badge">{{ params.minExitVotes }}/6</span></label>
-      <input type="range" min="1" max="6" step="1" [(ngModel)]="params.minExitVotes" />
+      <label>Reversal Votes <span class="value-badge">{{ params.minExitVotes }}/{{ params.enabledStrategies.length }}</span></label>
+      <input type="range" min="1" [max]="params.enabledStrategies.length" step="1" [(ngModel)]="params.minExitVotes" />
       <span class="hint">Exit on opposing consensus</span>
+    </div>
+
+    <div class="divider"></div>
+    <p class="section-title">🤖 ML Strategy</p>
+
+    <div class="control-group">
+      <label>ML Long Threshold <span class="value-badge">{{ params.mlLongThreshold | number:'1.2-2' }}</span></label>
+      <input type="range" min="0.50" max="0.90" step="0.01" [(ngModel)]="params.mlLongThreshold" />
+    </div>
+    <div class="control-group">
+      <label>ML Short Threshold <span class="value-badge">{{ params.mlShortThreshold | number:'1.2-2' }}</span></label>
+      <input type="range" min="0.10" max="0.50" step="0.01" [(ngModel)]="params.mlShortThreshold" />
     </div>
 
     <!-- Fixed TP/SL -->
@@ -329,6 +353,19 @@
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <div class="metrics-section" *ngIf="stats">
+      <div class="metrics-header">
+        <h3>🤖 ML Strategy Visualization</h3>
+      </div>
+      <div class="ml-usage-row">
+        <div class="metric-label">Signals using Neural Network</div>
+        <div class="metric-value">{{ getMlSignalCount() }} / {{ allTrades.length }}</div>
+      </div>
+      <div class="ml-usage-track">
+        <div class="ml-usage-fill" [style.width.%]="getMlSignalPercent()"></div>
       </div>
     </div>
 

@@ -70,6 +70,10 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+def _vote_denominator(consensus: ConsensusResult) -> int:
+    return max(1, consensus.long_votes + consensus.short_votes + consensus.neutral_votes)
+
+
 async def broadcast_tick(
     candles: list[dict],
     snapshot: IndicatorSnapshot,
@@ -131,7 +135,7 @@ async def broadcast_signal(consensus: ConsensusResult, snapshot: IndicatorSnapsh
             "timestamp": snapshot.timestamp.isoformat(),
             "direction": consensus.direction,
             "price": snapshot.current_price,
-            "votes": f"{len(consensus.agreeing_strategies)}/6",
+            "votes": f"{len(consensus.agreeing_strategies)}/{_vote_denominator(consensus)}",
             "strategies": consensus.agreeing_strategies,
             "strength": consensus.avg_strength,
             "rsi": snapshot.rsi,

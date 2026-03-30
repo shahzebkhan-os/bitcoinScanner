@@ -94,6 +94,9 @@ def test_backtest_endpoint_passes_signal_filters(monkeypatch):
         "minEmaSpreadPct": 0.001,
         "vwapCrossoverOnly": False,
         "minSignalStrength": 0.4,
+        "enabledStrategies": ["EMAcrossoverStrategy", "NeuralNetworkStrategy"],
+        "mlLongThreshold": 0.7,
+        "mlShortThreshold": 0.3,
     }
     res = client.post("/backtest", json=payload)
     assert res.status_code == 200
@@ -101,6 +104,9 @@ def test_backtest_endpoint_passes_signal_filters(monkeypatch):
     assert sf["min_ema_spread_pct"] == 0.001
     assert sf["vwap_crossover_only"] is False
     assert sf["min_signal_strength"] == 0.4
+    assert sf["ml_long_threshold"] == 0.7
+    assert sf["ml_short_threshold"] == 0.3
+    assert captured["config"]["enabled_strategies"] == ["EMAcrossoverStrategy", "NeuralNetworkStrategy"]
 
 
 def test_backtest_sweep_ranks_configs(monkeypatch):

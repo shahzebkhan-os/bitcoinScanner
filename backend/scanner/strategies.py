@@ -8,6 +8,7 @@ Responsibilities:
 """
 
 import logging
+import math
 from dataclasses import dataclass
 from typing import Optional
 import pandas as pd
@@ -21,6 +22,32 @@ EMA_SPREAD_STRENGTH_MULTIPLIER = 50.0
 VWAP_STRENGTH_BASE = 0.60
 # Additional strength per 1.0x volume above baseline.
 VWAP_STRENGTH_VOL_MULTIPLIER = 0.15
+# Heuristic feature weights for the lightweight ML strategy. These are
+# intentionally hand-tuned to emphasize trend/momentum (EMA+MACD), then VWAP
+# position, with RSI and volume as secondary confirmation signals.
+ML_WEIGHT_EMA_BIAS = 0.65
+ML_WEIGHT_MACD_SIGN = 0.55
+ML_WEIGHT_VWAP_BIAS = 0.45
+ML_WEIGHT_RSI_NORM = 0.40
+ML_WEIGHT_VOLUME_BIAS = 0.30
+
+ALL_STRATEGY_NAMES = [
+    "EMAcrossoverStrategy",
+    "RSIBollingerStrategy",
+    "VWAPBounceStrategy",
+    "RangeTradingStrategy",
+    "BreakoutStrategy",
+    "MACDMomentumStrategy",
+    "NeuralNetworkStrategy",
+]
+
+
+def get_enabled_strategies(config: dict) -> list[str]:
+    """Return enabled strategy names from config, defaulting to all."""
+    enabled = config.get("enabled_strategies")
+    if not isinstance(enabled, list) or not enabled:
+        return list(ALL_STRATEGY_NAMES)
+    return [name for name in enabled if name in ALL_STRATEGY_NAMES] or list(ALL_STRATEGY_NAMES)
 
 
 @dataclass
@@ -421,6 +448,55 @@ class MACDMomentumStrategy:
             )
 
 
+class NeuralNetworkStrategy:
+    """Strategy 7: Lightweight neural score (single-layer logistic model)."""
+
+    def evaluate(self, snapshot: IndicatorSnapshot, config: dict) -> SignalResult:
+        filters = config.get("signal_filters", {})
+        long_threshold = float(filters.get("ml_long_threshold", 0.60))
+        short_threshold = float(filters.get("ml_short_threshold", 0.40))
+
+        # Feature engineering (normalized)
+        ema_bias = float((snapshot.ema_fast > snapshot.ema_slow) - (snapshot.ema_fast < snapshot.ema_slow))
+        macd_sign = 1.0 if snapshot.macd_histogram > 0 else -1.0 if snapshot.macd_histogram < 0 else 0.0
+        vwap_bias = 1.0 if snapshot.close_vs_vwap == "above" else -1.0
+        rsi_norm = (snapshot.rsi - 50.0) / 50.0
+        volume_bias = max(-1.0, min(1.0, snapshot.volume_ratio - 1.0))
+
+        z = (
+            ML_WEIGHT_EMA_BIAS * ema_bias +
+            ML_WEIGHT_MACD_SIGN * macd_sign +
+            ML_WEIGHT_VWAP_BIAS * vwap_bias +
+            ML_WEIGHT_RSI_NORM * rsi_norm +
+            ML_WEIGHT_VOLUME_BIAS * volume_bias
+        )
+        z = max(-20.0, min(20.0, z))
+        probability_long = 1.0 / (1.0 + math.exp(-z))
+
+        if probability_long >= long_threshold:
+            strength = min(1.0, (probability_long - 0.5) * 2.0)
+            return SignalResult(
+                strategy_name="NeuralNetworkStrategy",
+                direction="LONG",
+                strength=round(strength, 2),
+                reason=f"ML score bullish ({probability_long:.2f})"
+            )
+        if probability_long <= short_threshold:
+            strength = min(1.0, (0.5 - probability_long) * 2.0)
+            return SignalResult(
+                strategy_name="NeuralNetworkStrategy",
+                direction="SHORT",
+                strength=round(strength, 2),
+                reason=f"ML score bearish ({probability_long:.2f})"
+            )
+        return SignalResult(
+            strategy_name="NeuralNetworkStrategy",
+            direction="NEUTRAL",
+            strength=0.0,
+            reason=f"ML score neutral ({probability_long:.2f})"
+        )
+
+
 def run_all_strategies(snapshot: IndicatorSnapshot, config: dict, df: Optional[pd.DataFrame] = None) -> list[SignalResult]:
     """
     Run all 6 strategies and return list of results.
@@ -434,44 +510,48 @@ def run_all_strategies(snapshot: IndicatorSnapshot, config: dict, df: Optional[p
         List of SignalResult from all strategies
     """
     results = []
+    enabled = set(get_enabled_strategies(config))
 
     try:
         # Strategy 1: EMA Crossover
-        strategy1 = EMAcrossoverStrategy()
-        results.append(strategy1.evaluate(snapshot, config))
+        if "EMAcrossoverStrategy" in enabled:
+            strategy1 = EMAcrossoverStrategy()
+            results.append(strategy1.evaluate(snapshot, config))
 
         # Strategy 2: RSI + Bollinger
-        strategy2 = RSIBollingerStrategy()
-        results.append(strategy2.evaluate(snapshot, config))
+        if "RSIBollingerStrategy" in enabled:
+            strategy2 = RSIBollingerStrategy()
+            results.append(strategy2.evaluate(snapshot, config))
 
         # Strategy 3: VWAP Bounce
-        strategy3 = VWAPBounceStrategy()
-        results.append(strategy3.evaluate(snapshot, config))
+        if "VWAPBounceStrategy" in enabled:
+            strategy3 = VWAPBounceStrategy()
+            results.append(strategy3.evaluate(snapshot, config))
 
         # Strategy 4: Range Trading
-        strategy4 = RangeTradingStrategy()
-        results.append(strategy4.evaluate(snapshot, config, df))
+        if "RangeTradingStrategy" in enabled:
+            strategy4 = RangeTradingStrategy()
+            results.append(strategy4.evaluate(snapshot, config, df))
 
         # Strategy 5: Breakout
-        strategy5 = BreakoutStrategy()
-        results.append(strategy5.evaluate(snapshot, config, df))
+        if "BreakoutStrategy" in enabled:
+            strategy5 = BreakoutStrategy()
+            results.append(strategy5.evaluate(snapshot, config, df))
 
         # Strategy 6: MACD Momentum
-        strategy6 = MACDMomentumStrategy()
-        results.append(strategy6.evaluate(snapshot, config))
+        if "MACDMomentumStrategy" in enabled:
+            strategy6 = MACDMomentumStrategy()
+            results.append(strategy6.evaluate(snapshot, config))
+
+        if "NeuralNetworkStrategy" in enabled:
+            strategy7 = NeuralNetworkStrategy()
+            results.append(strategy7.evaluate(snapshot, config))
 
     except Exception as e:
         logger.error(f"Error running strategies: {e}", exc_info=True)
 
-    # Ensure all 6 strategy votes are always present
-    expected = [
-        "EMAcrossoverStrategy",
-        "RSIBollingerStrategy",
-        "VWAPBounceStrategy",
-        "RangeTradingStrategy",
-        "BreakoutStrategy",
-        "MACDMomentumStrategy",
-    ]
+    # Ensure all enabled strategy votes are always present
+    expected = get_enabled_strategies(config)
     present = {r.strategy_name for r in results}
     for missing_name in [name for name in expected if name not in present]:
         results.append(

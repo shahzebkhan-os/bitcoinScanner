@@ -44,6 +44,7 @@ def _build_backtest_config(body: dict, config: dict) -> dict:
     return {
         "min_votes": min_votes,
         "min_exit_votes": min_exit_votes,
+        "enabled_strategies": body.get("enabledStrategies", config.get("enabled_strategies", [])),
         "useTrendFilter": bool(body.get("useTrendFilter", False)),
         "useVolumeFilter": bool(body.get("useVolumeFilter", False)),
         "volMultiplier": float(body.get("volMultiplier", 1.2)),
@@ -114,6 +115,14 @@ def _build_backtest_config(body: dict, config: dict) -> dict:
             "min_signal_strength": float(body.get(
                 "minSignalStrength",
                 config.get("signal_filters", {}).get("min_signal_strength", 0.0),
+            )),
+            "ml_long_threshold": float(body.get(
+                "mlLongThreshold",
+                config.get("signal_filters", {}).get("ml_long_threshold", 0.60),
+            )),
+            "ml_short_threshold": float(body.get(
+                "mlShortThreshold",
+                config.get("signal_filters", {}).get("ml_short_threshold", 0.40),
             )),
         },
     }
@@ -429,6 +438,7 @@ def setup_routes(app: FastAPI, config: dict, start_time: datetime, runtime_state
                     "pnl":        round(pnl, 2),
                     "result":     result_label,
                     "votes":      s["votes"],
+                    "strategies": s.get("strategies", ""),
                 })
 
             win_rate = (wins_count / total * 100) if total > 0 else 0

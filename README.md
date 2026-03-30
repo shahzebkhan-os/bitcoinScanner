@@ -86,7 +86,7 @@ The dashboard will open at `http://localhost:4200`
 5. **VWAP (Volume Weighted Average Price)**: Daily reset
 6. **Volume Analysis**: Current vs 20-period average
 
-### Trading Strategies (6)
+### Trading Strategies (7)
 
 1. **EMA Crossover**: Signals on EMA fast/slow crossovers
 2. **RSI + Bollinger**: Combines oversold/overbought RSI with BB extremes
@@ -94,10 +94,12 @@ The dashboard will open at `http://localhost:4200`
 4. **Range Trading**: Identifies sideways markets and trades boundaries
 5. **Breakout**: Detects range breakouts with volume confirmation
 6. **MACD Momentum**: MACD crossover combined with histogram and VWAP
+7. **Neural Network (ML)**: Lightweight neural-score vote using EMA, MACD, VWAP, RSI, and volume features
 
 ### Consensus Filter
 
-Signals fire only when **3 or more strategies agree** on the same direction (LONG or SHORT). This filter reduces false signals and increases reliability.
+Signals fire only when the configured minimum vote threshold is reached by enabled strategies.  
+You can now choose exactly which strategies participate in consensus (including the ML strategy) from the Backtester UI.
 
 ### Alert Channels
 
@@ -129,7 +131,7 @@ Signals fire only when **3 or more strategies agree** on the same direction (LON
   "timestamp": "2025-03-28T14:32:01.000Z",
   "direction": "LONG",
   "price": 84250.50,
-  "votes": "4/6",
+  "votes": "4/7",
   "strategies": [...],
   "strength": 0.74
 }
@@ -148,7 +150,15 @@ pair: "B-BTC_USDT"          # Trading pair
 interval: "1m"               # Candle interval
 candle_buffer_size: 200      # Rolling buffer size
 poll_interval_seconds: 1     # API polling frequency
-min_votes: 3                 # Consensus threshold (3-6)
+min_votes: 3                 # Consensus threshold
+enabled_strategies:          # Select only these strategies for consensus
+  - "EMAcrossoverStrategy"
+  - "RSIBollingerStrategy"
+  - "VWAPBounceStrategy"
+  - "RangeTradingStrategy"
+  - "BreakoutStrategy"
+  - "MACDMomentumStrategy"
+  - "NeuralNetworkStrategy"
 
 alerts:
   terminal: true             # Console alerts
@@ -171,7 +181,7 @@ Each signal is logged with:
 - Timestamp
 - Direction (LONG/SHORT)
 - Price
-- Vote count (e.g., "4/6")
+- Vote count (e.g., "4/7", depends on enabled strategies)
 - Strategy names
 - Average strength
 - RSI, MACD histogram, Volume ratio

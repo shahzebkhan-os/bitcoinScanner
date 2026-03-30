@@ -20,6 +20,7 @@ from scanner.indicators import calculate_indicators
 from scanner.strategies import run_all_strategies
 from scanner.consensus import evaluate_consensus, ConsensusResult
 from scanner.alerts import dispatch_alerts
+from scanner.strategies import get_enabled_strategies
 
 # API modules
 from api.websocket_server import manager, broadcast_tick, broadcast_signal
@@ -72,6 +73,10 @@ async def websocket_endpoint(websocket: WebSocket):
 # Signal cooldown tracking
 last_signal_time = {}
 COOLDOWN_SECONDS = 60
+
+
+def _strategy_capacity(config: dict) -> int:
+    return max(1, len(get_enabled_strategies(config)))
 
 
 def _build_overall_trend(
@@ -266,6 +271,8 @@ async def scanner_loop():
                 for interval, consensus in interval_consensus.items()
             }
 
+            strategy_capacity = _strategy_capacity(config)
+
             # Use aggregated majority vote for actionable signal
             total_long = overall_trend["totalLongVotes"]
             total_short = overall_trend["totalShortVotes"]
@@ -288,7 +295,7 @@ async def scanner_loop():
                         neutral_votes=overall_trend["totalNeutralVotes"],
                         avg_strength=strength_total / len(agreeing),
                         agreeing_strategies=agreeing,
-                        fired=len(agreeing) >= config.get('min_votes', 3),
+                        fired=len(agreeing) >= min(int(config.get('min_votes', 3)), strategy_capacity),
                     )
 
             # Always broadcast tick

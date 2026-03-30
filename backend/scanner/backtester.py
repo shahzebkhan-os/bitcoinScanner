@@ -10,6 +10,15 @@ import numpy as np
 import logging
 from typing import List, Dict, Any
 
+from scanner.strategies import (
+    get_enabled_strategies,
+    ML_WEIGHT_EMA_BIAS,
+    ML_WEIGHT_MACD_SIGN,
+    ML_WEIGHT_VWAP_BIAS,
+    ML_WEIGHT_RSI_NORM,
+    ML_WEIGHT_VOLUME_BIAS,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,7 +50,9 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
         bb_p        = ind_cfg.get('bb_period', 20)
         bb_std_mult = ind_cfg.get('bb_std', 2)
         risk_cfg    = config.get('risk', {})
-        min_votes   = config.get('min_votes', 3)
+        enabled_names = get_enabled_strategies(config)
+        enabled_count = max(1, len(enabled_names))
+        min_votes   = min(int(config.get('min_votes', 3)), enabled_count)
         target_rr   = risk_cfg.get('target_rr', 1.5)
         use_ts      = risk_cfg.get('useTrailingStop', False)
         ts_atr      = risk_cfg.get('trailingStopAtr', 2.0)
@@ -67,6 +78,8 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
         macd_rsi_short_min = float(signal_filters.get('macd_rsi_short_min', 32.0))
         macd_rsi_short_max = float(signal_filters.get('macd_rsi_short_max', 60.0))
         min_signal_strength = float(signal_filters.get('min_signal_strength', 0.0))
+        ml_long_threshold = float(signal_filters.get('ml_long_threshold', 0.60))
+        ml_short_threshold = float(signal_filters.get('ml_short_threshold', 0.40))
 
         # ── Indicators (vectorized) ───────────────────────────────────────────
         data['ema_fast'] = data['close'].ewm(span=ema_fast_p, adjust=False).mean()
@@ -204,11 +217,45 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
         s6[s6_short] = -1
         s6_strength[s6 != 0] = 0.78
 
-        votes = pd.DataFrame({'s1': s1, 's2': s2, 's3': s3, 's4': s4, 's5': s5, 's6': s6})
+        # Lightweight neural score strategy (single-layer logistic model)
+        ema_bias = np.sign(data['ema_fast'] - data['ema_slow']).astype(float)
+        macd_sign = np.sign(data['macd_hist']).astype(float)
+        vwap_bias = np.where(data['close_vs_vwap'] == 'above', 1.0, -1.0)
+        rsi_norm = ((data['rsi'] - 50.0) / 50.0).fillna(0.0).clip(-1.0, 1.0)
+        volume_bias = (data['vol_ratio'] - 1.0).fillna(0.0).clip(-1.0, 1.0)
+        z = (
+            ML_WEIGHT_EMA_BIAS * ema_bias +
+            ML_WEIGHT_MACD_SIGN * macd_sign +
+            ML_WEIGHT_VWAP_BIAS * vwap_bias +
+            ML_WEIGHT_RSI_NORM * rsi_norm +
+            ML_WEIGHT_VOLUME_BIAS * volume_bias
+        )
+        z = z.clip(-20.0, 20.0)
+        p_long = 1.0 / (1.0 + np.exp(-z))
+        s7 = pd.Series(0, index=data.index)
+        s7_strength = pd.Series(0.0, index=data.index)
+        s7[p_long >= ml_long_threshold] = 1
+        s7[p_long <= ml_short_threshold] = -1
+        s7_strength[s7 == 1] = ((p_long[s7 == 1] - 0.5) * 2.0).clip(upper=1.0)
+        s7_strength[s7 == -1] = ((0.5 - p_long[s7 == -1]) * 2.0).clip(upper=1.0)
+
+        votes = pd.DataFrame({'s1': s1, 's2': s2, 's3': s3, 's4': s4, 's5': s5, 's6': s6, 's7': s7})
         strengths = pd.DataFrame({
             's1': s1_strength, 's2': s2_strength, 's3': s3_strength,
-            's4': s4_strength, 's5': s5_strength, 's6': s6_strength
+            's4': s4_strength, 's5': s5_strength, 's6': s6_strength, 's7': s7_strength
         }).fillna(0.0)
+        strategy_col_map = {
+            "EMAcrossoverStrategy": "s1",
+            "RSIBollingerStrategy": "s2",
+            "VWAPBounceStrategy": "s3",
+            "RangeTradingStrategy": "s4",
+            "BreakoutStrategy": "s5",
+            "MACDMomentumStrategy": "s6",
+            "NeuralNetworkStrategy": "s7",
+        }
+        active_cols = [strategy_col_map[name] for name in enabled_names if name in strategy_col_map]
+        votes = votes[active_cols]
+        strengths = strengths[active_cols]
         qualified_votes = votes.where(strengths >= min_signal_strength, 0)
 
         data['long_votes'] = (qualified_votes == 1).sum(axis=1)
@@ -238,12 +285,9 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
         #   4. Enter the opposite position on the same candle that triggers exit (flip).
         #   5. No fixed TP/SL — the algorithm decides when to exit.
 
-        min_exit_votes = max(1, config.get('min_exit_votes', min_votes - 1))
-        strategy_names = [
-            "EMAcrossoverStrategy", "RSIBollingerStrategy", "VWAPBounceStrategy",
-            "RangeTradingStrategy", "BreakoutStrategy", "MACDMomentumStrategy"
-        ]
-        s_cols = ['s1', 's2', 's3', 's4', 's5', 's6']
+        min_exit_votes = min(max(1, int(config.get('min_exit_votes', min_votes - 1))), enabled_count)
+        strategy_names = enabled_names
+        s_cols = active_cols
 
         # Helper: get strategies that agree with a direction at given row
         def get_agreeing(row_votes, row_strengths, direction):
@@ -358,10 +402,10 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
                         "timestamp":       iso_ts,
                         "direction":       "SHORT",
                         "price":           close,
-                        "votes":           f"{sv}/6",
+                        "votes":           f"{sv}/{enabled_count}",
                         "strategies":      "; ".join(agreeing),
                         "agreeingStrategies": agreeing,
-                        "avgStrength":     round(len(agreeing) / 6, 2),
+                        "avgStrength":     round(len(agreeing) / enabled_count, 2),
                         "interval":        "history",
                         "entry":           close,
                         "stopLoss":        None,
@@ -393,10 +437,10 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
                         "timestamp":       iso_ts,
                         "direction":       "LONG",
                         "price":           close,
-                        "votes":           f"{lv}/6",
+                        "votes":           f"{lv}/{enabled_count}",
                         "strategies":      "; ".join(agreeing),
                         "agreeingStrategies": agreeing,
-                        "avgStrength":     round(len(agreeing) / 6, 2),
+                        "avgStrength":     round(len(agreeing) / enabled_count, 2),
                         "interval":        "history",
                         "entry":           close,
                         "stopLoss":        None,
@@ -428,10 +472,10 @@ def run_backtest(df: pd.DataFrame, config: dict) -> List[Dict[str, Any]]:
                     "timestamp":       iso_ts,
                     "direction":       direction,
                     "price":           close,
-                    "votes":           f"{lv if direction == 'LONG' else sv}/6",
+                    "votes":           f"{lv if direction == 'LONG' else sv}/{enabled_count}",
                     "strategies":      "; ".join(agreeing),
                     "agreeingStrategies": agreeing,
-                    "avgStrength":     round(len(agreeing) / 6, 2),
+                    "avgStrength":     round(len(agreeing) / enabled_count, 2),
                     "interval":        "history",
                     "entry":           close,
                     "stopLoss":        None,

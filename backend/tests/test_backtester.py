@@ -411,7 +411,8 @@ class TestSignalOutput:
             "VWAPBounceStrategy",
             "RangeTradingStrategy",
             "BreakoutStrategy",
-            "MACDMomentumStrategy"
+            "MACDMomentumStrategy",
+            "NeuralNetworkStrategy",
         ]
 
         for sig in signals:
@@ -421,6 +422,13 @@ class TestSignalOutput:
 
             for strategy in strategies:
                 assert strategy in valid_strategies
+
+    def test_votes_denominator_matches_enabled_strategy_count(self, uptrend_candles, sample_config):
+        sample_config['enabled_strategies'] = ['EMAcrossoverStrategy', 'NeuralNetworkStrategy']
+        sample_config['min_votes'] = 1
+        signals = run_backtest(uptrend_candles, sample_config)
+        for sig in signals:
+            assert sig['votes'].endswith('/2')
 
 
 class TestPerformance:

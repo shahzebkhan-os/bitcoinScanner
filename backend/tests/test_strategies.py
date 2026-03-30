@@ -7,6 +7,7 @@ from scanner.strategies import (
     RangeTradingStrategy,
     BreakoutStrategy,
     MACDMomentumStrategy,
+    NeuralNetworkStrategy,
     run_all_strategies,
 )
 
@@ -131,9 +132,27 @@ def test_macd_strategy_long_short_neutral(snapshot_factory, base_config):
     assert strat.evaluate(snapshot_factory(macd_cross="bearish", macd_histogram=-1, close_vs_vwap="below", rsi=25.0), base_config).direction == "NEUTRAL"
 
 
-def test_run_all_strategies_returns_all_six(snapshot_factory, base_config):
+def test_neural_strategy_long_short_neutral(snapshot_factory, base_config):
+    strat = NeuralNetworkStrategy()
+    neutral_cfg = dict(base_config)
+    neutral_cfg["signal_filters"] = {"ml_long_threshold": 0.7, "ml_short_threshold": 0.3}
+    assert strat.evaluate(
+        snapshot_factory(ema_fast=102, ema_slow=100, macd_histogram=1.2, close_vs_vwap="above", rsi=60, volume_ratio=1.8),
+        base_config
+    ).direction == "LONG"
+    assert strat.evaluate(
+        snapshot_factory(ema_fast=98, ema_slow=100, macd_histogram=-1.1, close_vs_vwap="below", rsi=40, volume_ratio=0.8),
+        base_config
+    ).direction == "SHORT"
+    assert strat.evaluate(
+        snapshot_factory(ema_fast=100, ema_slow=100, macd_histogram=0.0, close_vs_vwap="above", rsi=50, volume_ratio=1.0),
+        neutral_cfg
+    ).direction == "NEUTRAL"
+
+
+def test_run_all_strategies_returns_all_enabled(snapshot_factory, base_config):
     results = run_all_strategies(snapshot_factory(), base_config, _range_df())
-    assert len(results) == 6
+    assert len(results) == 7
     assert {r.strategy_name for r in results} == {
         "EMAcrossoverStrategy",
         "RSIBollingerStrategy",
@@ -141,4 +160,12 @@ def test_run_all_strategies_returns_all_six(snapshot_factory, base_config):
         "RangeTradingStrategy",
         "BreakoutStrategy",
         "MACDMomentumStrategy",
+        "NeuralNetworkStrategy",
     }
+
+
+def test_run_all_strategies_respects_enabled_strategy_selection(snapshot_factory, base_config):
+    cfg = dict(base_config)
+    cfg["enabled_strategies"] = ["EMAcrossoverStrategy", "NeuralNetworkStrategy"]
+    results = run_all_strategies(snapshot_factory(), cfg, _range_df())
+    assert {r.strategy_name for r in results} == {"EMAcrossoverStrategy", "NeuralNetworkStrategy"}

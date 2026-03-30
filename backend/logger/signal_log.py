@@ -50,11 +50,12 @@ def log_signal(consensus: ConsensusResult, snapshot: IndicatorSnapshot, trade_le
                 writer.writeheader()
 
             # Write signal row
+            vote_capacity = max(1, consensus.long_votes + consensus.short_votes + consensus.neutral_votes)
             writer.writerow({
                 'timestamp': snapshot.timestamp.isoformat(),
                 'direction': consensus.direction,
                 'price': f"{snapshot.current_price:.2f}",
-                'votes': f"{len(consensus.agreeing_strategies)}/6",
+                'votes': f"{len(consensus.agreeing_strategies)}/{vote_capacity}",
                 'strategies': '; '.join(consensus.agreeing_strategies),
                 'avg_strength': f"{consensus.avg_strength:.2f}",
                 'rsi': f"{snapshot.rsi:.1f}",
