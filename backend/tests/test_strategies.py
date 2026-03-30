@@ -150,6 +150,31 @@ def test_neural_strategy_long_short_neutral(snapshot_factory, base_config):
     ).direction == "NEUTRAL"
 
 
+def test_neural_strategy_respects_configured_feature_weights(snapshot_factory, base_config):
+    strat = NeuralNetworkStrategy()
+    bearish_snapshot = snapshot_factory(
+        ema_fast=98,
+        ema_slow=100,
+        macd_histogram=-0.8,
+        close_vs_vwap="below",
+        rsi=40,
+        volume_ratio=0.9,
+    )
+    assert strat.evaluate(bearish_snapshot, base_config).direction == "SHORT"
+
+    tuned_cfg = dict(base_config)
+    tuned_cfg["signal_filters"] = {
+        "ml_long_threshold": 0.60,
+        "ml_short_threshold": 0.40,
+        "ml_weight_ema_bias": -0.65,
+        "ml_weight_macd_sign": -0.55,
+        "ml_weight_vwap_bias": -0.45,
+        "ml_weight_rsi_norm": -0.40,
+        "ml_weight_volume_bias": -0.30,
+    }
+    assert strat.evaluate(bearish_snapshot, tuned_cfg).direction == "LONG"
+
+
 def test_run_all_strategies_returns_all_enabled(snapshot_factory, base_config):
     results = run_all_strategies(snapshot_factory(), base_config, _range_df())
     assert len(results) == 7

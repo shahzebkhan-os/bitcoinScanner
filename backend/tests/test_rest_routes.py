@@ -97,6 +97,11 @@ def test_backtest_endpoint_passes_signal_filters(monkeypatch):
         "enabledStrategies": ["EMAcrossoverStrategy", "NeuralNetworkStrategy"],
         "mlLongThreshold": 0.7,
         "mlShortThreshold": 0.3,
+        "mlWeightEmaBias": 0.75,
+        "mlWeightMacdSign": 0.65,
+        "mlWeightVwapBias": 0.55,
+        "mlWeightRsiNorm": 0.45,
+        "mlWeightVolumeBias": 0.35,
     }
     res = client.post("/backtest", json=payload)
     assert res.status_code == 200
@@ -106,6 +111,11 @@ def test_backtest_endpoint_passes_signal_filters(monkeypatch):
     assert sf["min_signal_strength"] == 0.4
     assert sf["ml_long_threshold"] == 0.7
     assert sf["ml_short_threshold"] == 0.3
+    assert sf["ml_weight_ema_bias"] == 0.75
+    assert sf["ml_weight_macd_sign"] == 0.65
+    assert sf["ml_weight_vwap_bias"] == 0.55
+    assert sf["ml_weight_rsi_norm"] == 0.45
+    assert sf["ml_weight_volume_bias"] == 0.35
     assert captured["config"]["enabled_strategies"] == ["EMAcrossoverStrategy", "NeuralNetworkStrategy"]
 
 

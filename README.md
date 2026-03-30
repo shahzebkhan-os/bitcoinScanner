@@ -101,6 +101,57 @@ The dashboard will open at `http://localhost:4200`
 Signals fire only when the configured minimum vote threshold is reached by enabled strategies.  
 You can now choose exactly which strategies participate in consensus (including the ML strategy) from the Backtester UI.
 
+## Training a New ML Strategy
+
+`NeuralNetworkStrategy` in this repo is a lightweight logistic model with 5 engineered features.  
+“Training” in this project means **tuning feature weights and thresholds with backtests**, then promoting the best set to `backend/config.yaml`.
+
+### 1) Parameters you can tune
+
+In `signal_filters`:
+
+- `ml_long_threshold`, `ml_short_threshold`
+- `ml_weight_ema_bias`
+- `ml_weight_macd_sign`
+- `ml_weight_vwap_bias`
+- `ml_weight_rsi_norm`
+- `ml_weight_volume_bias`
+
+### 2) Run a sweep (recommended)
+
+Use `POST /backtest/sweep` to test parameter combinations and rank by:
+
+`netReturnPct + (sortinoRatio * sortinoWeight) - (maxDrawdown * drawdownWeight)`
+
+Example:
+
+```bash
+curl -X POST http://localhost:8765/backtest/sweep \
+  -H "Content-Type: application/json" \
+  -d '{
+    "pair": "BTCUSDT",
+    "interval": "1m",
+    "limit": 10000,
+    "topN": 10,
+    "sortinoWeight": 10,
+    "drawdownWeight": 0.5,
+    "enabledStrategies": ["NeuralNetworkStrategy"],
+    "sweep": {
+      "mlLongThreshold": [0.58, 0.60, 0.62],
+      "mlShortThreshold": [0.38, 0.40, 0.42],
+      "mlWeightEmaBias": [0.50, 0.65, 0.80],
+      "mlWeightMacdSign": [0.40, 0.55, 0.70],
+      "mlWeightVwapBias": [0.30, 0.45, 0.60],
+      "mlWeightRsiNorm": [0.25, 0.40, 0.55],
+      "mlWeightVolumeBias": [0.15, 0.30, 0.45]
+    }
+  }'
+```
+
+### 3) Promote the winner
+
+Copy best values into `backend/config.yaml` under `signal_filters`, restart backend, and validate on a different time window to reduce overfitting.
+
 ### Alert Channels
 
 - **Terminal**: Color-coded alerts (green for LONG, red for SHORT)
